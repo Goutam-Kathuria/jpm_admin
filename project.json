@@ -1,0 +1,25 @@
+{
+  "overview": "A premium admin panel UI inspired by luxury furniture and interior design. Features 7 management sections (Dashboard, Inquiries, Categories, Products, Gallery, Reviews, Settings) with a live theme customization system using beige/cream/gold aesthetics, serif headings, and smooth animations.",
+  "features": [
+    "Luxury beige/cream/gold design aesthetic with serif headings",
+    "7-section admin navigation: Dashboard, Inquiries, Categories, Products, Gallery, Reviews, Settings",
+    "Dashboard with stat cards, Recharts chart, and recent inquiries table",
+    "Inquiries management with View modal, Email & WhatsApp reply links",
+    "Categories, Products, Gallery, Reviews CRUD with modal forms",
+    "Floating theme customization panel with color pickers, dark/light mode, font toggle, density, and border radius controls",
+    "CSS variable-based live theme that persists in localStorage",
+    "Reusable component system: Button, Card, Table, Modal, Form, Sidebar, Toast",
+    "Smooth animations, hover effects, and toast notifications throughout"
+  ],
+  "category": "productivity",
+  "tags": [
+    "admin-panel",
+    "dashboard",
+    "luxury-design",
+    "theme-customization",
+    "react",
+    "tailwind",
+    "ui-kit"
+  ],
+  "last_updated": "2026-04-10T20:39:44.880Z"
+}
