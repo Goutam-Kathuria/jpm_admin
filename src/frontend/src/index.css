@@ -10,8 +10,10 @@
     --radius: 0.5rem;
 
     --background: 0.96 0.015 75;
+    --background-color: 0.96 0.015 75;
     --foreground: 0.2 0.03 50;
     --card: 0.98 0.01 75;
+    --card-bg: 0.98 0.01 75;
     --card-foreground: 0.2 0.03 50;
     --popover: 0.98 0.01 75;
     --popover-foreground: 0.2 0.03 50;
@@ -41,6 +43,7 @@
     --chart-5: 0.52 0.12 140;
 
     --sidebar: 0.96 0.015 75;
+    --sidebar-bg: 0.96 0.015 75;
     --sidebar-foreground: 0.2 0.03 50;
     --sidebar-primary: 0.55 0.12 30;
     --sidebar-primary-foreground: 0.96 0.01 30;
@@ -48,12 +51,16 @@
     --sidebar-accent-foreground: 0.3 0.03 50;
     --sidebar-border: 0.88 0.025 75;
     --sidebar-ring: 0.55 0.12 30;
+    
+    --navbar-bg: 0.96 0.015 75;
   }
 
   .dark {
     --background: 0.14 0.015 50;
+    --background-color: 0.14 0.015 50;
     --foreground: 0.92 0.01 60;
     --card: 0.18 0.018 50;
+    --card-bg: 0.18 0.018 50;
     --card-foreground: 0.92 0.01 60;
     --popover: 0.18 0.018 50;
     --popover-foreground: 0.92 0.01 60;
@@ -83,6 +90,7 @@
     --chart-5: 0.62 0.12 140;
 
     --sidebar: 0.14 0.015 50;
+    --sidebar-bg: 0.14 0.015 50;
     --sidebar-foreground: 0.92 0.01 60;
     --sidebar-primary: 0.72 0.17 70;
     --sidebar-primary-foreground: 0.14 0.015 70;
@@ -90,6 +98,8 @@
     --sidebar-accent-foreground: 0.82 0.01 60;
     --sidebar-border: 0.28 0.02 50;
     --sidebar-ring: 0.72 0.17 70;
+    
+    --navbar-bg: 0.14 0.015 50;
   }
 
   * {

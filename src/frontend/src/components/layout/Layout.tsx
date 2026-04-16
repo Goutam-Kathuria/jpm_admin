@@ -7,10 +7,18 @@ import { type PageId, Sidebar } from "./Sidebar";
 interface LayoutProps {
   currentPage: PageId;
   onNavigate: (page: PageId) => void;
+  adminDisplayName: string;
+  onLogout: () => void;
   children: React.ReactNode;
 }
 
-export function Layout({ currentPage, onNavigate, children }: LayoutProps) {
+export function Layout({
+  currentPage,
+  onNavigate,
+  adminDisplayName,
+  onLogout,
+  children,
+}: LayoutProps) {
   const { settings } = useThemeStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -79,6 +87,8 @@ export function Layout({ currentPage, onNavigate, children }: LayoutProps) {
         <Navbar
           currentPage={currentPage}
           onMenuToggle={() => setMobileOpen((v) => !v)}
+          adminDisplayName={adminDisplayName}
+          onLogout={onLogout}
         />
         <main
           className="flex-1 overflow-y-auto bg-background p-6"

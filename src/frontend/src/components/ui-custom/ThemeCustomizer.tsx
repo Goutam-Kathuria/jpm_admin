@@ -77,6 +77,28 @@ const accentPresets = [
   { label: "Warm", value: "0.5 0.08 50" },
 ];
 
+const backgroundPresets = [
+  { label: "Light", value: "0.96 0.015 75" },
+  { label: "Warm", value: "0.96 0.02 50" },
+  { label: "Cool", value: "0.96 0.015 200" },
+  { label: "Soft", value: "0.94 0.01 75" },
+  { label: "Cream", value: "0.97 0.008 60" },
+];
+
+const sidebarPresets = [
+  { label: "Light", value: "0.96 0.015 75" },
+  { label: "Muted", value: "0.92 0.02 75" },
+  { label: "Subtle", value: "0.94 0.01 75" },
+  { label: "Warm", value: "0.96 0.02 50" },
+];
+
+const cardPresets = [
+  { label: "Clean", value: "0.98 0.01 75" },
+  { label: "Soft", value: "0.96 0.015 75" },
+  { label: "Minimal", value: "0.99 0.005 75" },
+  { label: "Warm", value: "0.98 0.01 50" },
+];
+
 function ColorSwatch({
   value,
   selected,
@@ -243,6 +265,49 @@ export function ThemeCustomizer() {
               presets={accentPresets}
               onPreset={(v) => setField("accentColor", v)}
               onColorPick={(v) => setField("accentColor", v)}
+            />
+
+            {/* Background Colors Section */}
+            <div className="pt-2 border-t border-border/40">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+                Background Colors
+              </p>
+            </div>
+
+            {/* Main Background Color */}
+            <ColorPickerRow
+              label="Main Background"
+              value={settings.backgroundColor}
+              presets={backgroundPresets}
+              onPreset={(v) => setField("backgroundColor", v)}
+              onColorPick={(v) => setField("backgroundColor", v)}
+            />
+
+            {/* Sidebar Background Color */}
+            <ColorPickerRow
+              label="Sidebar Background"
+              value={settings.sidebarBgColor}
+              presets={sidebarPresets}
+              onPreset={(v) => setField("sidebarBgColor", v)}
+              onColorPick={(v) => setField("sidebarBgColor", v)}
+            />
+
+            {/* Card Background Color */}
+            <ColorPickerRow
+              label="Card Background"
+              value={settings.cardBgColor}
+              presets={cardPresets}
+              onPreset={(v) => setField("cardBgColor", v)}
+              onColorPick={(v) => setField("cardBgColor", v)}
+            />
+
+            {/* Navbar Background Color */}
+            <ColorPickerRow
+              label="Navbar Background"
+              value={settings.navbarBgColor}
+              presets={backgroundPresets}
+              onPreset={(v) => setField("navbarBgColor", v)}
+              onColorPick={(v) => setField("navbarBgColor", v)}
             />
 
             {/* Font Style */}

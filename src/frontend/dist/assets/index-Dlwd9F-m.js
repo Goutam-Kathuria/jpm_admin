@@ -17,7 +17,7 @@ var __privateWrapper = (obj, member, setter, getter) => ({
     return __privateGet(obj, member, getter);
   }
 });
-var _focused, _cleanup, _setup, _a, _provider, _providerCalled, _b, _online, _cleanup2, _setup2, _c, _gcTimeout, _d, _initialState, _revertState, _cache, _client, _retryer, _defaultOptions, _abortSignalConsumed, _Query_instances, isInitialPausedFetch_fn, dispatch_fn, _e, _client2, _observers, _mutationCache, _retryer2, _Mutation_instances, dispatch_fn2, _f, _mutations, _scopes, _mutationId, _g, _queries, _h, _queryCache, _mutationCache2, _defaultOptions2, _queryDefaults, _mutationDefaults, _mountCount, _unsubscribeFocus, _unsubscribeOnline, _i, _rawKey, _derKey, _publicKey, _privateKey, _inner, _delegation, _options;
+var _focused, _cleanup, _setup, _a, _provider, _providerCalled, _b, _online, _cleanup2, _setup2, _c, _gcTimeout, _d, _initialState, _revertState, _cache, _client, _retryer, _defaultOptions, _abortSignalConsumed, _Query_instances, isInitialPausedFetch_fn, dispatch_fn, _e, _client2, _currentQuery, _currentQueryInitialState, _currentResult, _currentResultState, _currentResultOptions, _currentThenable, _selectError, _selectFn, _selectResult, _lastQueryWithDefinedData, _staleTimeoutId, _refetchIntervalId, _currentRefetchInterval, _trackedProps, _QueryObserver_instances, executeFetch_fn, updateStaleTimeout_fn, computeRefetchInterval_fn, updateRefetchInterval_fn, updateTimers_fn, clearStaleTimeout_fn, clearRefetchInterval_fn, updateQuery_fn, notify_fn, _f, _client3, _observers, _mutationCache, _retryer2, _Mutation_instances, dispatch_fn2, _g, _mutations, _scopes, _mutationId, _h, _client4, _currentResult2, _currentMutation, _mutateOptions, _MutationObserver_instances, updateResult_fn, notify_fn2, _i, _queries, _j, _queryCache, _mutationCache2, _defaultOptions2, _queryDefaults, _mutationDefaults, _mountCount, _unsubscribeFocus, _unsubscribeOnline, _k, _rawKey, _derKey, _publicKey, _privateKey, _inner, _delegation, _options;
 function _mergeNamespaces(n2, m2) {
   for (var i = 0; i < m2.length; i++) {
     const e3 = m2[i];
@@ -3310,6 +3310,17 @@ function replaceEqualDeep(a2, b2, depth = 0) {
   }
   return aSize === bSize && equalItems === aSize ? a2 : copy2;
 }
+function shallowEqualObjects(a2, b2) {
+  if (!b2 || Object.keys(a2).length !== Object.keys(b2).length) {
+    return false;
+  }
+  for (const key in a2) {
+    if (a2[key] !== b2[key]) {
+      return false;
+    }
+  }
+  return true;
+}
 function isPlainArray(value) {
   return Array.isArray(value) && value.length === Object.keys(value).length;
 }
@@ -3366,6 +3377,12 @@ function ensureQueryFn(options, fetchOptions) {
     return () => Promise.reject(new Error(`Missing queryFn: '${options.queryHash}'`));
   }
   return options.queryFn;
+}
+function shouldThrowError(throwOnError, params) {
+  if (typeof throwOnError === "function") {
+    return throwOnError(...params);
+  }
+  return !!throwOnError;
 }
 function addConsumeAwareSignal(object2, getSignal, onCancelled) {
   let consumed = false;
@@ -3880,7 +3897,7 @@ var Query = (_e = class extends Removable {
     }
   }
   async fetch(options, fetchOptions) {
-    var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j, _k, _l;
+    var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l;
     if (this.state.fetchStatus !== "idle" && // If the promise in the retryer is already rejected, we have to definitely
     // re-start the fetch; there is a chance that the query is still in a
     // pending state when that happens
@@ -4007,13 +4024,13 @@ var Query = (_e = class extends Removable {
         type: "error",
         error
       });
-      (_j = (_i2 = __privateGet(this, _cache).config).onError) == null ? void 0 : _j.call(
+      (_j2 = (_i2 = __privateGet(this, _cache).config).onError) == null ? void 0 : _j2.call(
         _i2,
         error,
         this
       );
-      (_l = (_k = __privateGet(this, _cache).config).onSettled) == null ? void 0 : _l.call(
-        _k,
+      (_l = (_k2 = __privateGet(this, _cache).config).onSettled) == null ? void 0 : _l.call(
+        _k2,
         this.state.data,
         error,
         this
@@ -4137,6 +4154,450 @@ function getDefaultState$1(options) {
     fetchStatus: "idle"
   };
 }
+var QueryObserver = (_f = class extends Subscribable {
+  constructor(client2, options) {
+    super();
+    __privateAdd(this, _QueryObserver_instances);
+    __privateAdd(this, _client2);
+    __privateAdd(this, _currentQuery);
+    __privateAdd(this, _currentQueryInitialState);
+    __privateAdd(this, _currentResult);
+    __privateAdd(this, _currentResultState);
+    __privateAdd(this, _currentResultOptions);
+    __privateAdd(this, _currentThenable);
+    __privateAdd(this, _selectError);
+    __privateAdd(this, _selectFn);
+    __privateAdd(this, _selectResult);
+    // This property keeps track of the last query with defined data.
+    // It will be used to pass the previous data and query to the placeholder function between renders.
+    __privateAdd(this, _lastQueryWithDefinedData);
+    __privateAdd(this, _staleTimeoutId);
+    __privateAdd(this, _refetchIntervalId);
+    __privateAdd(this, _currentRefetchInterval);
+    __privateAdd(this, _trackedProps, /* @__PURE__ */ new Set());
+    this.options = options;
+    __privateSet(this, _client2, client2);
+    __privateSet(this, _selectError, null);
+    __privateSet(this, _currentThenable, pendingThenable());
+    this.bindMethods();
+    this.setOptions(options);
+  }
+  bindMethods() {
+    this.refetch = this.refetch.bind(this);
+  }
+  onSubscribe() {
+    if (this.listeners.size === 1) {
+      __privateGet(this, _currentQuery).addObserver(this);
+      if (shouldFetchOnMount(__privateGet(this, _currentQuery), this.options)) {
+        __privateMethod(this, _QueryObserver_instances, executeFetch_fn).call(this);
+      } else {
+        this.updateResult();
+      }
+      __privateMethod(this, _QueryObserver_instances, updateTimers_fn).call(this);
+    }
+  }
+  onUnsubscribe() {
+    if (!this.hasListeners()) {
+      this.destroy();
+    }
+  }
+  shouldFetchOnReconnect() {
+    return shouldFetchOn(
+      __privateGet(this, _currentQuery),
+      this.options,
+      this.options.refetchOnReconnect
+    );
+  }
+  shouldFetchOnWindowFocus() {
+    return shouldFetchOn(
+      __privateGet(this, _currentQuery),
+      this.options,
+      this.options.refetchOnWindowFocus
+    );
+  }
+  destroy() {
+    this.listeners = /* @__PURE__ */ new Set();
+    __privateMethod(this, _QueryObserver_instances, clearStaleTimeout_fn).call(this);
+    __privateMethod(this, _QueryObserver_instances, clearRefetchInterval_fn).call(this);
+    __privateGet(this, _currentQuery).removeObserver(this);
+  }
+  setOptions(options) {
+    const prevOptions = this.options;
+    const prevQuery = __privateGet(this, _currentQuery);
+    this.options = __privateGet(this, _client2).defaultQueryOptions(options);
+    if (this.options.enabled !== void 0 && typeof this.options.enabled !== "boolean" && typeof this.options.enabled !== "function" && typeof resolveEnabled(this.options.enabled, __privateGet(this, _currentQuery)) !== "boolean") {
+      throw new Error(
+        "Expected enabled to be a boolean or a callback that returns a boolean"
+      );
+    }
+    __privateMethod(this, _QueryObserver_instances, updateQuery_fn).call(this);
+    __privateGet(this, _currentQuery).setOptions(this.options);
+    if (prevOptions._defaulted && !shallowEqualObjects(this.options, prevOptions)) {
+      __privateGet(this, _client2).getQueryCache().notify({
+        type: "observerOptionsUpdated",
+        query: __privateGet(this, _currentQuery),
+        observer: this
+      });
+    }
+    const mounted = this.hasListeners();
+    if (mounted && shouldFetchOptionally(
+      __privateGet(this, _currentQuery),
+      prevQuery,
+      this.options,
+      prevOptions
+    )) {
+      __privateMethod(this, _QueryObserver_instances, executeFetch_fn).call(this);
+    }
+    this.updateResult();
+    if (mounted && (__privateGet(this, _currentQuery) !== prevQuery || resolveEnabled(this.options.enabled, __privateGet(this, _currentQuery)) !== resolveEnabled(prevOptions.enabled, __privateGet(this, _currentQuery)) || resolveStaleTime(this.options.staleTime, __privateGet(this, _currentQuery)) !== resolveStaleTime(prevOptions.staleTime, __privateGet(this, _currentQuery)))) {
+      __privateMethod(this, _QueryObserver_instances, updateStaleTimeout_fn).call(this);
+    }
+    const nextRefetchInterval = __privateMethod(this, _QueryObserver_instances, computeRefetchInterval_fn).call(this);
+    if (mounted && (__privateGet(this, _currentQuery) !== prevQuery || resolveEnabled(this.options.enabled, __privateGet(this, _currentQuery)) !== resolveEnabled(prevOptions.enabled, __privateGet(this, _currentQuery)) || nextRefetchInterval !== __privateGet(this, _currentRefetchInterval))) {
+      __privateMethod(this, _QueryObserver_instances, updateRefetchInterval_fn).call(this, nextRefetchInterval);
+    }
+  }
+  getOptimisticResult(options) {
+    const query = __privateGet(this, _client2).getQueryCache().build(__privateGet(this, _client2), options);
+    const result = this.createResult(query, options);
+    if (shouldAssignObserverCurrentProperties(this, result)) {
+      __privateSet(this, _currentResult, result);
+      __privateSet(this, _currentResultOptions, this.options);
+      __privateSet(this, _currentResultState, __privateGet(this, _currentQuery).state);
+    }
+    return result;
+  }
+  getCurrentResult() {
+    return __privateGet(this, _currentResult);
+  }
+  trackResult(result, onPropTracked) {
+    return new Proxy(result, {
+      get: (target, key) => {
+        this.trackProp(key);
+        onPropTracked == null ? void 0 : onPropTracked(key);
+        if (key === "promise") {
+          this.trackProp("data");
+          if (!this.options.experimental_prefetchInRender && __privateGet(this, _currentThenable).status === "pending") {
+            __privateGet(this, _currentThenable).reject(
+              new Error(
+                "experimental_prefetchInRender feature flag is not enabled"
+              )
+            );
+          }
+        }
+        return Reflect.get(target, key);
+      }
+    });
+  }
+  trackProp(key) {
+    __privateGet(this, _trackedProps).add(key);
+  }
+  getCurrentQuery() {
+    return __privateGet(this, _currentQuery);
+  }
+  refetch({ ...options } = {}) {
+    return this.fetch({
+      ...options
+    });
+  }
+  fetchOptimistic(options) {
+    const defaultedOptions = __privateGet(this, _client2).defaultQueryOptions(options);
+    const query = __privateGet(this, _client2).getQueryCache().build(__privateGet(this, _client2), defaultedOptions);
+    return query.fetch().then(() => this.createResult(query, defaultedOptions));
+  }
+  fetch(fetchOptions) {
+    return __privateMethod(this, _QueryObserver_instances, executeFetch_fn).call(this, {
+      ...fetchOptions,
+      cancelRefetch: fetchOptions.cancelRefetch ?? true
+    }).then(() => {
+      this.updateResult();
+      return __privateGet(this, _currentResult);
+    });
+  }
+  createResult(query, options) {
+    var _a2;
+    const prevQuery = __privateGet(this, _currentQuery);
+    const prevOptions = this.options;
+    const prevResult = __privateGet(this, _currentResult);
+    const prevResultState = __privateGet(this, _currentResultState);
+    const prevResultOptions = __privateGet(this, _currentResultOptions);
+    const queryChange = query !== prevQuery;
+    const queryInitialState = queryChange ? query.state : __privateGet(this, _currentQueryInitialState);
+    const { state } = query;
+    let newState = { ...state };
+    let isPlaceholderData = false;
+    let data;
+    if (options._optimisticResults) {
+      const mounted = this.hasListeners();
+      const fetchOnMount = !mounted && shouldFetchOnMount(query, options);
+      const fetchOptionally = mounted && shouldFetchOptionally(query, prevQuery, options, prevOptions);
+      if (fetchOnMount || fetchOptionally) {
+        newState = {
+          ...newState,
+          ...fetchState(state.data, query.options)
+        };
+      }
+      if (options._optimisticResults === "isRestoring") {
+        newState.fetchStatus = "idle";
+      }
+    }
+    let { error, errorUpdatedAt, status } = newState;
+    data = newState.data;
+    let skipSelect = false;
+    if (options.placeholderData !== void 0 && data === void 0 && status === "pending") {
+      let placeholderData;
+      if ((prevResult == null ? void 0 : prevResult.isPlaceholderData) && options.placeholderData === (prevResultOptions == null ? void 0 : prevResultOptions.placeholderData)) {
+        placeholderData = prevResult.data;
+        skipSelect = true;
+      } else {
+        placeholderData = typeof options.placeholderData === "function" ? options.placeholderData(
+          (_a2 = __privateGet(this, _lastQueryWithDefinedData)) == null ? void 0 : _a2.state.data,
+          __privateGet(this, _lastQueryWithDefinedData)
+        ) : options.placeholderData;
+      }
+      if (placeholderData !== void 0) {
+        status = "success";
+        data = replaceData(
+          prevResult == null ? void 0 : prevResult.data,
+          placeholderData,
+          options
+        );
+        isPlaceholderData = true;
+      }
+    }
+    if (options.select && data !== void 0 && !skipSelect) {
+      if (prevResult && data === (prevResultState == null ? void 0 : prevResultState.data) && options.select === __privateGet(this, _selectFn)) {
+        data = __privateGet(this, _selectResult);
+      } else {
+        try {
+          __privateSet(this, _selectFn, options.select);
+          data = options.select(data);
+          data = replaceData(prevResult == null ? void 0 : prevResult.data, data, options);
+          __privateSet(this, _selectResult, data);
+          __privateSet(this, _selectError, null);
+        } catch (selectError) {
+          __privateSet(this, _selectError, selectError);
+        }
+      }
+    }
+    if (__privateGet(this, _selectError)) {
+      error = __privateGet(this, _selectError);
+      data = __privateGet(this, _selectResult);
+      errorUpdatedAt = Date.now();
+      status = "error";
+    }
+    const isFetching = newState.fetchStatus === "fetching";
+    const isPending = status === "pending";
+    const isError = status === "error";
+    const isLoading = isPending && isFetching;
+    const hasData = data !== void 0;
+    const result = {
+      status,
+      fetchStatus: newState.fetchStatus,
+      isPending,
+      isSuccess: status === "success",
+      isError,
+      isInitialLoading: isLoading,
+      isLoading,
+      data,
+      dataUpdatedAt: newState.dataUpdatedAt,
+      error,
+      errorUpdatedAt,
+      failureCount: newState.fetchFailureCount,
+      failureReason: newState.fetchFailureReason,
+      errorUpdateCount: newState.errorUpdateCount,
+      isFetched: query.isFetched(),
+      isFetchedAfterMount: newState.dataUpdateCount > queryInitialState.dataUpdateCount || newState.errorUpdateCount > queryInitialState.errorUpdateCount,
+      isFetching,
+      isRefetching: isFetching && !isPending,
+      isLoadingError: isError && !hasData,
+      isPaused: newState.fetchStatus === "paused",
+      isPlaceholderData,
+      isRefetchError: isError && hasData,
+      isStale: isStale(query, options),
+      refetch: this.refetch,
+      promise: __privateGet(this, _currentThenable),
+      isEnabled: resolveEnabled(options.enabled, query) !== false
+    };
+    const nextResult = result;
+    if (this.options.experimental_prefetchInRender) {
+      const hasResultData = nextResult.data !== void 0;
+      const isErrorWithoutData = nextResult.status === "error" && !hasResultData;
+      const finalizeThenableIfPossible = (thenable) => {
+        if (isErrorWithoutData) {
+          thenable.reject(nextResult.error);
+        } else if (hasResultData) {
+          thenable.resolve(nextResult.data);
+        }
+      };
+      const recreateThenable = () => {
+        const pending = __privateSet(this, _currentThenable, nextResult.promise = pendingThenable());
+        finalizeThenableIfPossible(pending);
+      };
+      const prevThenable = __privateGet(this, _currentThenable);
+      switch (prevThenable.status) {
+        case "pending":
+          if (query.queryHash === prevQuery.queryHash) {
+            finalizeThenableIfPossible(prevThenable);
+          }
+          break;
+        case "fulfilled":
+          if (isErrorWithoutData || nextResult.data !== prevThenable.value) {
+            recreateThenable();
+          }
+          break;
+        case "rejected":
+          if (!isErrorWithoutData || nextResult.error !== prevThenable.reason) {
+            recreateThenable();
+          }
+          break;
+      }
+    }
+    return nextResult;
+  }
+  updateResult() {
+    const prevResult = __privateGet(this, _currentResult);
+    const nextResult = this.createResult(__privateGet(this, _currentQuery), this.options);
+    __privateSet(this, _currentResultState, __privateGet(this, _currentQuery).state);
+    __privateSet(this, _currentResultOptions, this.options);
+    if (__privateGet(this, _currentResultState).data !== void 0) {
+      __privateSet(this, _lastQueryWithDefinedData, __privateGet(this, _currentQuery));
+    }
+    if (shallowEqualObjects(nextResult, prevResult)) {
+      return;
+    }
+    __privateSet(this, _currentResult, nextResult);
+    const shouldNotifyListeners = () => {
+      if (!prevResult) {
+        return true;
+      }
+      const { notifyOnChangeProps } = this.options;
+      const notifyOnChangePropsValue = typeof notifyOnChangeProps === "function" ? notifyOnChangeProps() : notifyOnChangeProps;
+      if (notifyOnChangePropsValue === "all" || !notifyOnChangePropsValue && !__privateGet(this, _trackedProps).size) {
+        return true;
+      }
+      const includedProps = new Set(
+        notifyOnChangePropsValue ?? __privateGet(this, _trackedProps)
+      );
+      if (this.options.throwOnError) {
+        includedProps.add("error");
+      }
+      return Object.keys(__privateGet(this, _currentResult)).some((key) => {
+        const typedKey = key;
+        const changed = __privateGet(this, _currentResult)[typedKey] !== prevResult[typedKey];
+        return changed && includedProps.has(typedKey);
+      });
+    };
+    __privateMethod(this, _QueryObserver_instances, notify_fn).call(this, { listeners: shouldNotifyListeners() });
+  }
+  onQueryUpdate() {
+    this.updateResult();
+    if (this.hasListeners()) {
+      __privateMethod(this, _QueryObserver_instances, updateTimers_fn).call(this);
+    }
+  }
+}, _client2 = new WeakMap(), _currentQuery = new WeakMap(), _currentQueryInitialState = new WeakMap(), _currentResult = new WeakMap(), _currentResultState = new WeakMap(), _currentResultOptions = new WeakMap(), _currentThenable = new WeakMap(), _selectError = new WeakMap(), _selectFn = new WeakMap(), _selectResult = new WeakMap(), _lastQueryWithDefinedData = new WeakMap(), _staleTimeoutId = new WeakMap(), _refetchIntervalId = new WeakMap(), _currentRefetchInterval = new WeakMap(), _trackedProps = new WeakMap(), _QueryObserver_instances = new WeakSet(), executeFetch_fn = function(fetchOptions) {
+  __privateMethod(this, _QueryObserver_instances, updateQuery_fn).call(this);
+  let promise = __privateGet(this, _currentQuery).fetch(
+    this.options,
+    fetchOptions
+  );
+  if (!(fetchOptions == null ? void 0 : fetchOptions.throwOnError)) {
+    promise = promise.catch(noop$7);
+  }
+  return promise;
+}, updateStaleTimeout_fn = function() {
+  __privateMethod(this, _QueryObserver_instances, clearStaleTimeout_fn).call(this);
+  const staleTime = resolveStaleTime(
+    this.options.staleTime,
+    __privateGet(this, _currentQuery)
+  );
+  if (environmentManager.isServer() || __privateGet(this, _currentResult).isStale || !isValidTimeout(staleTime)) {
+    return;
+  }
+  const time2 = timeUntilStale(__privateGet(this, _currentResult).dataUpdatedAt, staleTime);
+  const timeout = time2 + 1;
+  __privateSet(this, _staleTimeoutId, timeoutManager.setTimeout(() => {
+    if (!__privateGet(this, _currentResult).isStale) {
+      this.updateResult();
+    }
+  }, timeout));
+}, computeRefetchInterval_fn = function() {
+  return (typeof this.options.refetchInterval === "function" ? this.options.refetchInterval(__privateGet(this, _currentQuery)) : this.options.refetchInterval) ?? false;
+}, updateRefetchInterval_fn = function(nextInterval) {
+  __privateMethod(this, _QueryObserver_instances, clearRefetchInterval_fn).call(this);
+  __privateSet(this, _currentRefetchInterval, nextInterval);
+  if (environmentManager.isServer() || resolveEnabled(this.options.enabled, __privateGet(this, _currentQuery)) === false || !isValidTimeout(__privateGet(this, _currentRefetchInterval)) || __privateGet(this, _currentRefetchInterval) === 0) {
+    return;
+  }
+  __privateSet(this, _refetchIntervalId, timeoutManager.setInterval(() => {
+    if (this.options.refetchIntervalInBackground || focusManager.isFocused()) {
+      __privateMethod(this, _QueryObserver_instances, executeFetch_fn).call(this);
+    }
+  }, __privateGet(this, _currentRefetchInterval)));
+}, updateTimers_fn = function() {
+  __privateMethod(this, _QueryObserver_instances, updateStaleTimeout_fn).call(this);
+  __privateMethod(this, _QueryObserver_instances, updateRefetchInterval_fn).call(this, __privateMethod(this, _QueryObserver_instances, computeRefetchInterval_fn).call(this));
+}, clearStaleTimeout_fn = function() {
+  if (__privateGet(this, _staleTimeoutId)) {
+    timeoutManager.clearTimeout(__privateGet(this, _staleTimeoutId));
+    __privateSet(this, _staleTimeoutId, void 0);
+  }
+}, clearRefetchInterval_fn = function() {
+  if (__privateGet(this, _refetchIntervalId)) {
+    timeoutManager.clearInterval(__privateGet(this, _refetchIntervalId));
+    __privateSet(this, _refetchIntervalId, void 0);
+  }
+}, updateQuery_fn = function() {
+  const query = __privateGet(this, _client2).getQueryCache().build(__privateGet(this, _client2), this.options);
+  if (query === __privateGet(this, _currentQuery)) {
+    return;
+  }
+  const prevQuery = __privateGet(this, _currentQuery);
+  __privateSet(this, _currentQuery, query);
+  __privateSet(this, _currentQueryInitialState, query.state);
+  if (this.hasListeners()) {
+    prevQuery == null ? void 0 : prevQuery.removeObserver(this);
+    query.addObserver(this);
+  }
+}, notify_fn = function(notifyOptions) {
+  notifyManager.batch(() => {
+    if (notifyOptions.listeners) {
+      this.listeners.forEach((listener) => {
+        listener(__privateGet(this, _currentResult));
+      });
+    }
+    __privateGet(this, _client2).getQueryCache().notify({
+      query: __privateGet(this, _currentQuery),
+      type: "observerResultsUpdated"
+    });
+  });
+}, _f);
+function shouldLoadOnMount(query, options) {
+  return resolveEnabled(options.enabled, query) !== false && query.state.data === void 0 && !(query.state.status === "error" && options.retryOnMount === false);
+}
+function shouldFetchOnMount(query, options) {
+  return shouldLoadOnMount(query, options) || query.state.data !== void 0 && shouldFetchOn(query, options, options.refetchOnMount);
+}
+function shouldFetchOn(query, options, field) {
+  if (resolveEnabled(options.enabled, query) !== false && resolveStaleTime(options.staleTime, query) !== "static") {
+    const value = typeof field === "function" ? field(query) : field;
+    return value === "always" || value !== false && isStale(query, options);
+  }
+  return false;
+}
+function shouldFetchOptionally(query, prevQuery, options, prevOptions) {
+  return (query !== prevQuery || resolveEnabled(prevOptions.enabled, query) === false) && (!options.suspense || query.state.status !== "error") && isStale(query, options);
+}
+function isStale(query, options) {
+  return resolveEnabled(options.enabled, query) !== false && query.isStaleByTime(resolveStaleTime(options.staleTime, query));
+}
+function shouldAssignObserverCurrentProperties(observer, optimisticResult) {
+  if (!shallowEqualObjects(observer.getCurrentResult(), optimisticResult)) {
+    return true;
+  }
+  return false;
+}
 function infiniteQueryBehavior(pages) {
   return {
     onFetch: (context, query) => {
@@ -4240,15 +4701,15 @@ function getPreviousPageParam(options, { pages, pageParams }) {
   var _a2;
   return pages.length > 0 ? (_a2 = options.getPreviousPageParam) == null ? void 0 : _a2.call(options, pages[0], pages, pageParams[0], pageParams) : void 0;
 }
-var Mutation = (_f = class extends Removable {
+var Mutation = (_g = class extends Removable {
   constructor(config2) {
     super();
     __privateAdd(this, _Mutation_instances);
-    __privateAdd(this, _client2);
+    __privateAdd(this, _client3);
     __privateAdd(this, _observers);
     __privateAdd(this, _mutationCache);
     __privateAdd(this, _retryer2);
-    __privateSet(this, _client2, config2.client);
+    __privateSet(this, _client3, config2.client);
     this.mutationId = config2.mutationId;
     __privateSet(this, _mutationCache, config2.mutationCache);
     __privateSet(this, _observers, []);
@@ -4298,12 +4759,12 @@ var Mutation = (_f = class extends Removable {
     this.execute(this.state.variables);
   }
   async execute(variables) {
-    var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j, _k, _l, _m, _n, _o, _p, _q, _r;
+    var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2, _i2, _j2, _k2, _l, _m, _n, _o, _p, _q, _r;
     const onContinue = () => {
       __privateMethod(this, _Mutation_instances, dispatch_fn2).call(this, { type: "continue" });
     };
     const mutationFnContext = {
-      client: __privateGet(this, _client2),
+      client: __privateGet(this, _client3),
       meta: this.options.meta,
       mutationKey: this.options.mutationKey
     };
@@ -4379,7 +4840,7 @@ var Mutation = (_f = class extends Removable {
         this,
         mutationFnContext
       ));
-      await ((_j = (_i2 = this.options).onSettled) == null ? void 0 : _j.call(
+      await ((_j2 = (_i2 = this.options).onSettled) == null ? void 0 : _j2.call(
         _i2,
         data,
         null,
@@ -4391,8 +4852,8 @@ var Mutation = (_f = class extends Removable {
       return data;
     } catch (error) {
       try {
-        await ((_l = (_k = __privateGet(this, _mutationCache).config).onError) == null ? void 0 : _l.call(
-          _k,
+        await ((_l = (_k2 = __privateGet(this, _mutationCache).config).onError) == null ? void 0 : _l.call(
+          _k2,
           error,
           variables,
           this.state.context,
@@ -4444,7 +4905,7 @@ var Mutation = (_f = class extends Removable {
       __privateGet(this, _mutationCache).runNext(this);
     }
   }
-}, _client2 = new WeakMap(), _observers = new WeakMap(), _mutationCache = new WeakMap(), _retryer2 = new WeakMap(), _Mutation_instances = new WeakSet(), dispatch_fn2 = function(action) {
+}, _client3 = new WeakMap(), _observers = new WeakMap(), _mutationCache = new WeakMap(), _retryer2 = new WeakMap(), _Mutation_instances = new WeakSet(), dispatch_fn2 = function(action) {
   const reducer = (state) => {
     switch (action.type) {
       case "failed":
@@ -4509,7 +4970,7 @@ var Mutation = (_f = class extends Removable {
       action
     });
   });
-}, _f);
+}, _g);
 function getDefaultState() {
   return {
     context: void 0,
@@ -4523,7 +4984,7 @@ function getDefaultState() {
     submittedAt: 0
   };
 }
-var MutationCache = (_g = class extends Subscribable {
+var MutationCache = (_h = class extends Subscribable {
   constructor(config2 = {}) {
     super();
     __privateAdd(this, _mutations);
@@ -4635,12 +5096,152 @@ var MutationCache = (_g = class extends Subscribable {
       )
     );
   }
-}, _mutations = new WeakMap(), _scopes = new WeakMap(), _mutationId = new WeakMap(), _g);
+}, _mutations = new WeakMap(), _scopes = new WeakMap(), _mutationId = new WeakMap(), _h);
 function scopeFor(mutation) {
   var _a2;
   return (_a2 = mutation.options.scope) == null ? void 0 : _a2.id;
 }
-var QueryCache = (_h = class extends Subscribable {
+var MutationObserver$1 = (_i = class extends Subscribable {
+  constructor(client2, options) {
+    super();
+    __privateAdd(this, _MutationObserver_instances);
+    __privateAdd(this, _client4);
+    __privateAdd(this, _currentResult2);
+    __privateAdd(this, _currentMutation);
+    __privateAdd(this, _mutateOptions);
+    __privateSet(this, _client4, client2);
+    this.setOptions(options);
+    this.bindMethods();
+    __privateMethod(this, _MutationObserver_instances, updateResult_fn).call(this);
+  }
+  bindMethods() {
+    this.mutate = this.mutate.bind(this);
+    this.reset = this.reset.bind(this);
+  }
+  setOptions(options) {
+    var _a2;
+    const prevOptions = this.options;
+    this.options = __privateGet(this, _client4).defaultMutationOptions(options);
+    if (!shallowEqualObjects(this.options, prevOptions)) {
+      __privateGet(this, _client4).getMutationCache().notify({
+        type: "observerOptionsUpdated",
+        mutation: __privateGet(this, _currentMutation),
+        observer: this
+      });
+    }
+    if ((prevOptions == null ? void 0 : prevOptions.mutationKey) && this.options.mutationKey && hashKey(prevOptions.mutationKey) !== hashKey(this.options.mutationKey)) {
+      this.reset();
+    } else if (((_a2 = __privateGet(this, _currentMutation)) == null ? void 0 : _a2.state.status) === "pending") {
+      __privateGet(this, _currentMutation).setOptions(this.options);
+    }
+  }
+  onUnsubscribe() {
+    var _a2;
+    if (!this.hasListeners()) {
+      (_a2 = __privateGet(this, _currentMutation)) == null ? void 0 : _a2.removeObserver(this);
+    }
+  }
+  onMutationUpdate(action) {
+    __privateMethod(this, _MutationObserver_instances, updateResult_fn).call(this);
+    __privateMethod(this, _MutationObserver_instances, notify_fn2).call(this, action);
+  }
+  getCurrentResult() {
+    return __privateGet(this, _currentResult2);
+  }
+  reset() {
+    var _a2;
+    (_a2 = __privateGet(this, _currentMutation)) == null ? void 0 : _a2.removeObserver(this);
+    __privateSet(this, _currentMutation, void 0);
+    __privateMethod(this, _MutationObserver_instances, updateResult_fn).call(this);
+    __privateMethod(this, _MutationObserver_instances, notify_fn2).call(this);
+  }
+  mutate(variables, options) {
+    var _a2;
+    __privateSet(this, _mutateOptions, options);
+    (_a2 = __privateGet(this, _currentMutation)) == null ? void 0 : _a2.removeObserver(this);
+    __privateSet(this, _currentMutation, __privateGet(this, _client4).getMutationCache().build(__privateGet(this, _client4), this.options));
+    __privateGet(this, _currentMutation).addObserver(this);
+    return __privateGet(this, _currentMutation).execute(variables);
+  }
+}, _client4 = new WeakMap(), _currentResult2 = new WeakMap(), _currentMutation = new WeakMap(), _mutateOptions = new WeakMap(), _MutationObserver_instances = new WeakSet(), updateResult_fn = function() {
+  var _a2;
+  const state = ((_a2 = __privateGet(this, _currentMutation)) == null ? void 0 : _a2.state) ?? getDefaultState();
+  __privateSet(this, _currentResult2, {
+    ...state,
+    isPending: state.status === "pending",
+    isSuccess: state.status === "success",
+    isError: state.status === "error",
+    isIdle: state.status === "idle",
+    mutate: this.mutate,
+    reset: this.reset
+  });
+}, notify_fn2 = function(action) {
+  notifyManager.batch(() => {
+    var _a2, _b2, _c2, _d2, _e2, _f2, _g2, _h2;
+    if (__privateGet(this, _mutateOptions) && this.hasListeners()) {
+      const variables = __privateGet(this, _currentResult2).variables;
+      const onMutateResult = __privateGet(this, _currentResult2).context;
+      const context = {
+        client: __privateGet(this, _client4),
+        meta: this.options.meta,
+        mutationKey: this.options.mutationKey
+      };
+      if ((action == null ? void 0 : action.type) === "success") {
+        try {
+          (_b2 = (_a2 = __privateGet(this, _mutateOptions)).onSuccess) == null ? void 0 : _b2.call(
+            _a2,
+            action.data,
+            variables,
+            onMutateResult,
+            context
+          );
+        } catch (e3) {
+          void Promise.reject(e3);
+        }
+        try {
+          (_d2 = (_c2 = __privateGet(this, _mutateOptions)).onSettled) == null ? void 0 : _d2.call(
+            _c2,
+            action.data,
+            null,
+            variables,
+            onMutateResult,
+            context
+          );
+        } catch (e3) {
+          void Promise.reject(e3);
+        }
+      } else if ((action == null ? void 0 : action.type) === "error") {
+        try {
+          (_f2 = (_e2 = __privateGet(this, _mutateOptions)).onError) == null ? void 0 : _f2.call(
+            _e2,
+            action.error,
+            variables,
+            onMutateResult,
+            context
+          );
+        } catch (e3) {
+          void Promise.reject(e3);
+        }
+        try {
+          (_h2 = (_g2 = __privateGet(this, _mutateOptions)).onSettled) == null ? void 0 : _h2.call(
+            _g2,
+            void 0,
+            action.error,
+            variables,
+            onMutateResult,
+            context
+          );
+        } catch (e3) {
+          void Promise.reject(e3);
+        }
+      }
+    }
+    this.listeners.forEach((listener) => {
+      listener(__privateGet(this, _currentResult2));
+    });
+  });
+}, _i);
+var QueryCache = (_j = class extends Subscribable {
   constructor(config2 = {}) {
     super();
     __privateAdd(this, _queries);
@@ -4727,8 +5328,8 @@ var QueryCache = (_h = class extends Subscribable {
       });
     });
   }
-}, _queries = new WeakMap(), _h);
-var QueryClient = (_i = class {
+}, _queries = new WeakMap(), _j);
+var QueryClient = (_k = class {
   constructor(config2 = {}) {
     __privateAdd(this, _queryCache);
     __privateAdd(this, _mutationCache2);
@@ -5015,7 +5616,7 @@ var QueryClient = (_i = class {
     __privateGet(this, _queryCache).clear();
     __privateGet(this, _mutationCache2).clear();
   }
-}, _queryCache = new WeakMap(), _mutationCache2 = new WeakMap(), _defaultOptions2 = new WeakMap(), _queryDefaults = new WeakMap(), _mutationDefaults = new WeakMap(), _mountCount = new WeakMap(), _unsubscribeFocus = new WeakMap(), _unsubscribeOnline = new WeakMap(), _i);
+}, _queryCache = new WeakMap(), _mutationCache2 = new WeakMap(), _defaultOptions2 = new WeakMap(), _queryDefaults = new WeakMap(), _mutationDefaults = new WeakMap(), _mountCount = new WeakMap(), _unsubscribeFocus = new WeakMap(), _unsubscribeOnline = new WeakMap(), _k);
 var react = { exports: {} };
 var react_production = {};
 /**
@@ -5463,6 +6064,13 @@ const React$3 = /* @__PURE__ */ _mergeNamespaces({
 var QueryClientContext = reactExports.createContext(
   void 0
 );
+var useQueryClient = (queryClient2) => {
+  const client2 = reactExports.useContext(QueryClientContext);
+  if (!client2) {
+    throw new Error("No QueryClient set, use QueryClientProvider to set one");
+  }
+  return client2;
+};
 var QueryClientProvider = ({
   client: client2,
   children
@@ -5475,6 +6083,169 @@ var QueryClientProvider = ({
   }, [client2]);
   return /* @__PURE__ */ jsxRuntimeExports.jsx(QueryClientContext.Provider, { value: client2, children });
 };
+var IsRestoringContext = reactExports.createContext(false);
+var useIsRestoring = () => reactExports.useContext(IsRestoringContext);
+IsRestoringContext.Provider;
+function createValue() {
+  let isReset = false;
+  return {
+    clearReset: () => {
+      isReset = false;
+    },
+    reset: () => {
+      isReset = true;
+    },
+    isReset: () => {
+      return isReset;
+    }
+  };
+}
+var QueryErrorResetBoundaryContext = reactExports.createContext(createValue());
+var useQueryErrorResetBoundary = () => reactExports.useContext(QueryErrorResetBoundaryContext);
+var ensurePreventErrorBoundaryRetry = (options, errorResetBoundary, query) => {
+  const throwOnError = (query == null ? void 0 : query.state.error) && typeof options.throwOnError === "function" ? shouldThrowError(options.throwOnError, [query.state.error, query]) : options.throwOnError;
+  if (options.suspense || options.experimental_prefetchInRender || throwOnError) {
+    if (!errorResetBoundary.isReset()) {
+      options.retryOnMount = false;
+    }
+  }
+};
+var useClearResetErrorBoundary = (errorResetBoundary) => {
+  reactExports.useEffect(() => {
+    errorResetBoundary.clearReset();
+  }, [errorResetBoundary]);
+};
+var getHasError = ({
+  result,
+  errorResetBoundary,
+  throwOnError,
+  query,
+  suspense
+}) => {
+  return result.isError && !errorResetBoundary.isReset() && !result.isFetching && query && (suspense && result.data === void 0 || shouldThrowError(throwOnError, [result.error, query]));
+};
+var ensureSuspenseTimers = (defaultedOptions) => {
+  if (defaultedOptions.suspense) {
+    const MIN_SUSPENSE_TIME_MS = 1e3;
+    const clamp2 = (value) => value === "static" ? value : Math.max(value ?? MIN_SUSPENSE_TIME_MS, MIN_SUSPENSE_TIME_MS);
+    const originalStaleTime = defaultedOptions.staleTime;
+    defaultedOptions.staleTime = typeof originalStaleTime === "function" ? (...args) => clamp2(originalStaleTime(...args)) : clamp2(originalStaleTime);
+    if (typeof defaultedOptions.gcTime === "number") {
+      defaultedOptions.gcTime = Math.max(
+        defaultedOptions.gcTime,
+        MIN_SUSPENSE_TIME_MS
+      );
+    }
+  }
+};
+var willFetch = (result, isRestoring) => result.isLoading && result.isFetching && !isRestoring;
+var shouldSuspend = (defaultedOptions, result) => (defaultedOptions == null ? void 0 : defaultedOptions.suspense) && result.isPending;
+var fetchOptimistic = (defaultedOptions, observer, errorResetBoundary) => observer.fetchOptimistic(defaultedOptions).catch(() => {
+  errorResetBoundary.clearReset();
+});
+function useBaseQuery(options, Observer, queryClient2) {
+  var _a2, _b2, _c2, _d2;
+  const isRestoring = useIsRestoring();
+  const errorResetBoundary = useQueryErrorResetBoundary();
+  const client2 = useQueryClient();
+  const defaultedOptions = client2.defaultQueryOptions(options);
+  (_b2 = (_a2 = client2.getDefaultOptions().queries) == null ? void 0 : _a2._experimental_beforeQuery) == null ? void 0 : _b2.call(
+    _a2,
+    defaultedOptions
+  );
+  const query = client2.getQueryCache().get(defaultedOptions.queryHash);
+  defaultedOptions._optimisticResults = isRestoring ? "isRestoring" : "optimistic";
+  ensureSuspenseTimers(defaultedOptions);
+  ensurePreventErrorBoundaryRetry(defaultedOptions, errorResetBoundary, query);
+  useClearResetErrorBoundary(errorResetBoundary);
+  const isNewCacheEntry = !client2.getQueryCache().get(defaultedOptions.queryHash);
+  const [observer] = reactExports.useState(
+    () => new Observer(
+      client2,
+      defaultedOptions
+    )
+  );
+  const result = observer.getOptimisticResult(defaultedOptions);
+  const shouldSubscribe = !isRestoring && options.subscribed !== false;
+  reactExports.useSyncExternalStore(
+    reactExports.useCallback(
+      (onStoreChange) => {
+        const unsubscribe = shouldSubscribe ? observer.subscribe(notifyManager.batchCalls(onStoreChange)) : noop$7;
+        observer.updateResult();
+        return unsubscribe;
+      },
+      [observer, shouldSubscribe]
+    ),
+    () => observer.getCurrentResult(),
+    () => observer.getCurrentResult()
+  );
+  reactExports.useEffect(() => {
+    observer.setOptions(defaultedOptions);
+  }, [defaultedOptions, observer]);
+  if (shouldSuspend(defaultedOptions, result)) {
+    throw fetchOptimistic(defaultedOptions, observer, errorResetBoundary);
+  }
+  if (getHasError({
+    result,
+    errorResetBoundary,
+    throwOnError: defaultedOptions.throwOnError,
+    query,
+    suspense: defaultedOptions.suspense
+  })) {
+    throw result.error;
+  }
+  (_d2 = (_c2 = client2.getDefaultOptions().queries) == null ? void 0 : _c2._experimental_afterQuery) == null ? void 0 : _d2.call(
+    _c2,
+    defaultedOptions,
+    result
+  );
+  if (defaultedOptions.experimental_prefetchInRender && !environmentManager.isServer() && willFetch(result, isRestoring)) {
+    const promise = isNewCacheEntry ? (
+      // Fetch immediately on render in order to ensure `.promise` is resolved even if the component is unmounted
+      fetchOptimistic(defaultedOptions, observer, errorResetBoundary)
+    ) : (
+      // subscribe to the "cache promise" so that we can finalize the currentThenable once data comes in
+      query == null ? void 0 : query.promise
+    );
+    promise == null ? void 0 : promise.catch(noop$7).finally(() => {
+      observer.updateResult();
+    });
+  }
+  return !defaultedOptions.notifyOnChangeProps ? observer.trackResult(result) : result;
+}
+function useQuery(options, queryClient2) {
+  return useBaseQuery(options, QueryObserver);
+}
+function useMutation(options, queryClient2) {
+  const client2 = useQueryClient();
+  const [observer] = reactExports.useState(
+    () => new MutationObserver$1(
+      client2,
+      options
+    )
+  );
+  reactExports.useEffect(() => {
+    observer.setOptions(options);
+  }, [observer, options]);
+  const result = reactExports.useSyncExternalStore(
+    reactExports.useCallback(
+      (onStoreChange) => observer.subscribe(notifyManager.batchCalls(onStoreChange)),
+      [observer]
+    ),
+    () => observer.getCurrentResult(),
+    () => observer.getCurrentResult()
+  );
+  const mutate = reactExports.useCallback(
+    (variables, mutateOptions) => {
+      observer.mutate(variables, mutateOptions).catch(noop$7);
+    },
+    [observer]
+  );
+  if (result.error && shouldThrowError(observer.options.throwOnError, [result.error])) {
+    throw result.error;
+  }
+  return { ...result, mutate, mutateAsync: result.mutate };
+}
 function isObject$9(value) {
   return value !== null && typeof value === "object";
 }
@@ -21665,7 +22436,7 @@ const createLucideIcon = (iconName, iconNode) => {
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$w = [
+const __iconNode$B = [
   ["path", { d: "M10.268 21a2 2 0 0 0 3.464 0", key: "vwvbt9" }],
   [
     "path",
@@ -21675,54 +22446,54 @@ const __iconNode$w = [
     }
   ]
 ];
-const Bell = createLucideIcon("bell", __iconNode$w);
+const Bell = createLucideIcon("bell", __iconNode$B);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$v = [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]];
-const Check = createLucideIcon("check", __iconNode$v);
+const __iconNode$A = [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]];
+const Check = createLucideIcon("check", __iconNode$A);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$u = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
-const ChevronDown = createLucideIcon("chevron-down", __iconNode$u);
+const __iconNode$z = [["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]];
+const ChevronDown = createLucideIcon("chevron-down", __iconNode$z);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$t = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
-const ChevronLeft = createLucideIcon("chevron-left", __iconNode$t);
+const __iconNode$y = [["path", { d: "m15 18-6-6 6-6", key: "1wnfg3" }]];
+const ChevronLeft = createLucideIcon("chevron-left", __iconNode$y);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$s = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
-const ChevronRight = createLucideIcon("chevron-right", __iconNode$s);
+const __iconNode$x = [["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]];
+const ChevronRight = createLucideIcon("chevron-right", __iconNode$x);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$r = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
-const ChevronUp = createLucideIcon("chevron-up", __iconNode$r);
+const __iconNode$w = [["path", { d: "m18 15-6-6-6 6", key: "153udz" }]];
+const ChevronUp = createLucideIcon("chevron-up", __iconNode$w);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$q = [
+const __iconNode$v = [
   [
     "path",
     {
@@ -21740,14 +22511,14 @@ const __iconNode$q = [
   ],
   ["path", { d: "m2 2 20 20", key: "1ooewy" }]
 ];
-const EyeOff = createLucideIcon("eye-off", __iconNode$q);
+const EyeOff = createLucideIcon("eye-off", __iconNode$v);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$p = [
+const __iconNode$u = [
   [
     "path",
     {
@@ -21757,14 +22528,14 @@ const __iconNode$p = [
   ],
   ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Eye = createLucideIcon("eye", __iconNode$p);
+const Eye = createLucideIcon("eye", __iconNode$u);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$o = [
+const __iconNode$t = [
   [
     "path",
     {
@@ -21773,7 +22544,74 @@ const __iconNode$o = [
     }
   ]
 ];
-const FolderOpen = createLucideIcon("folder-open", __iconNode$o);
+const FolderOpen = createLucideIcon("folder-open", __iconNode$t);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$s = [
+  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
+  ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
+  ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
+];
+const Image = createLucideIcon("image", __iconNode$s);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$r = [
+  [
+    "path",
+    {
+      d: "M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z",
+      key: "1s6t7t"
+    }
+  ],
+  ["circle", { cx: "16.5", cy: "7.5", r: ".5", fill: "currentColor", key: "w0ekpg" }]
+];
+const KeyRound = createLucideIcon("key-round", __iconNode$r);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$q = [
+  ["rect", { width: "7", height: "9", x: "3", y: "3", rx: "1", key: "10lvy0" }],
+  ["rect", { width: "7", height: "5", x: "14", y: "3", rx: "1", key: "16une8" }],
+  ["rect", { width: "7", height: "9", x: "14", y: "12", rx: "1", key: "1hutg5" }],
+  ["rect", { width: "7", height: "5", x: "3", y: "16", rx: "1", key: "ldoo1y" }]
+];
+const LayoutDashboard = createLucideIcon("layout-dashboard", __iconNode$q);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$p = [
+  ["rect", { width: "7", height: "7", x: "3", y: "3", rx: "1", key: "1g98yp" }],
+  ["rect", { width: "7", height: "7", x: "14", y: "3", rx: "1", key: "6d4xhi" }],
+  ["rect", { width: "7", height: "7", x: "14", y: "14", rx: "1", key: "nxv5o0" }],
+  ["rect", { width: "7", height: "7", x: "3", y: "14", rx: "1", key: "1bb6yr" }]
+];
+const LayoutGrid = createLucideIcon("layout-grid", __iconNode$p);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$o = [
+  ["circle", { cx: "12", cy: "16", r: "1", key: "1au0dj" }],
+  ["rect", { x: "3", y: "10", width: "18", height: "12", rx: "2", key: "6s8ecr" }],
+  ["path", { d: "M7 10V7a5 5 0 0 1 10 0v3", key: "1pqi11" }]
+];
+const LockKeyhole = createLucideIcon("lock-keyhole", __iconNode$o);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21781,11 +22619,10 @@ const FolderOpen = createLucideIcon("folder-open", __iconNode$o);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$n = [
-  ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2", key: "1m3agn" }],
-  ["circle", { cx: "9", cy: "9", r: "2", key: "af1f0g" }],
-  ["path", { d: "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", key: "1xmnt7" }]
+  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
+  ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
 ];
-const Image = createLucideIcon("image", __iconNode$n);
+const Lock = createLucideIcon("lock", __iconNode$n);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21793,12 +22630,11 @@ const Image = createLucideIcon("image", __iconNode$n);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$m = [
-  ["rect", { width: "7", height: "9", x: "3", y: "3", rx: "1", key: "10lvy0" }],
-  ["rect", { width: "7", height: "5", x: "14", y: "3", rx: "1", key: "16une8" }],
-  ["rect", { width: "7", height: "9", x: "14", y: "12", rx: "1", key: "1hutg5" }],
-  ["rect", { width: "7", height: "5", x: "3", y: "16", rx: "1", key: "ldoo1y" }]
+  ["path", { d: "m10 17 5-5-5-5", key: "1bsop3" }],
+  ["path", { d: "M15 12H3", key: "6jk70r" }],
+  ["path", { d: "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4", key: "u53s6r" }]
 ];
-const LayoutDashboard = createLucideIcon("layout-dashboard", __iconNode$m);
+const LogIn = createLucideIcon("log-in", __iconNode$m);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21806,12 +22642,11 @@ const LayoutDashboard = createLucideIcon("layout-dashboard", __iconNode$m);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$l = [
-  ["rect", { width: "7", height: "7", x: "3", y: "3", rx: "1", key: "1g98yp" }],
-  ["rect", { width: "7", height: "7", x: "14", y: "3", rx: "1", key: "6d4xhi" }],
-  ["rect", { width: "7", height: "7", x: "14", y: "14", rx: "1", key: "nxv5o0" }],
-  ["rect", { width: "7", height: "7", x: "3", y: "14", rx: "1", key: "1bb6yr" }]
+  ["path", { d: "m16 17 5-5-5-5", key: "1bji2h" }],
+  ["path", { d: "M21 12H9", key: "dn1m92" }],
+  ["path", { d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", key: "1uf3rs" }]
 ];
-const LayoutGrid = createLucideIcon("layout-grid", __iconNode$l);
+const LogOut = createLucideIcon("log-out", __iconNode$l);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21819,10 +22654,10 @@ const LayoutGrid = createLucideIcon("layout-grid", __iconNode$l);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$k = [
-  ["rect", { width: "18", height: "11", x: "3", y: "11", rx: "2", ry: "2", key: "1w4ew1" }],
-  ["path", { d: "M7 11V7a5 5 0 0 1 10 0v4", key: "fwvmzm" }]
+  ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
+  ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
 ];
-const Lock = createLucideIcon("lock", __iconNode$k);
+const Mail = createLucideIcon("mail", __iconNode$k);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21830,10 +22665,11 @@ const Lock = createLucideIcon("lock", __iconNode$k);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$j = [
-  ["path", { d: "m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7", key: "132q7q" }],
-  ["rect", { x: "2", y: "4", width: "20", height: "16", rx: "2", key: "izxlao" }]
+  ["path", { d: "M4 12h16", key: "1lakjw" }],
+  ["path", { d: "M4 18h16", key: "19g7jn" }],
+  ["path", { d: "M4 6h16", key: "1o0s65" }]
 ];
-const Mail = createLucideIcon("mail", __iconNode$j);
+const Menu = createLucideIcon("menu", __iconNode$j);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21841,11 +22677,9 @@ const Mail = createLucideIcon("mail", __iconNode$j);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$i = [
-  ["path", { d: "M4 12h16", key: "1lakjw" }],
-  ["path", { d: "M4 18h16", key: "19g7jn" }],
-  ["path", { d: "M4 6h16", key: "1o0s65" }]
+  ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
 ];
-const Menu = createLucideIcon("menu", __iconNode$i);
+const MessageSquare = createLucideIcon("message-square", __iconNode$i);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21853,9 +22687,9 @@ const Menu = createLucideIcon("menu", __iconNode$i);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$h = [
-  ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
+  ["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z", key: "a7tn18" }]
 ];
-const MessageSquare = createLucideIcon("message-square", __iconNode$h);
+const Moon = createLucideIcon("moon", __iconNode$h);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21863,9 +22697,16 @@ const MessageSquare = createLucideIcon("message-square", __iconNode$h);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$g = [
-  ["path", { d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z", key: "a7tn18" }]
+  [
+    "path",
+    {
+      d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+      key: "1a8usu"
+    }
+  ],
+  ["path", { d: "m15 5 4 4", key: "1mk7zo" }]
 ];
-const Moon = createLucideIcon("moon", __iconNode$g);
+const Pencil = createLucideIcon("pencil", __iconNode$g);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21876,13 +22717,12 @@ const __iconNode$f = [
   [
     "path",
     {
-      d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
-      key: "1a8usu"
+      d: "M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384",
+      key: "9njp5v"
     }
-  ],
-  ["path", { d: "m15 5 4 4", key: "1mk7zo" }]
+  ]
 ];
-const Pencil = createLucideIcon("pencil", __iconNode$f);
+const Phone = createLucideIcon("phone", __iconNode$f);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21890,15 +22730,10 @@ const Pencil = createLucideIcon("pencil", __iconNode$f);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$e = [
-  [
-    "path",
-    {
-      d: "M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384",
-      key: "9njp5v"
-    }
-  ]
+  ["path", { d: "M5 12h14", key: "1ays0h" }],
+  ["path", { d: "M12 5v14", key: "s699le" }]
 ];
-const Phone = createLucideIcon("phone", __iconNode$e);
+const Plus = createLucideIcon("plus", __iconNode$e);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21906,17 +22741,6 @@ const Phone = createLucideIcon("phone", __iconNode$e);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$d = [
-  ["path", { d: "M5 12h14", key: "1ays0h" }],
-  ["path", { d: "M12 5v14", key: "s699le" }]
-];
-const Plus = createLucideIcon("plus", __iconNode$d);
-/**
- * @license lucide-react v0.511.0 - ISC
- *
- * This source code is licensed under the ISC license.
- * See the LICENSE file in the root directory of this source tree.
- */
-const __iconNode$c = [
   [
     "path",
     {
@@ -21932,14 +22756,14 @@ const __iconNode$c = [
     }
   ]
 ];
-const Quote = createLucideIcon("quote", __iconNode$c);
+const Quote = createLucideIcon("quote", __iconNode$d);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const __iconNode$b = [
+const __iconNode$c = [
   [
     "path",
     {
@@ -21950,7 +22774,18 @@ const __iconNode$b = [
   ["path", { d: "M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7", key: "1ydtos" }],
   ["path", { d: "M7 3v4a1 1 0 0 0 1 1h7", key: "t51u73" }]
 ];
-const Save = createLucideIcon("save", __iconNode$b);
+const Save = createLucideIcon("save", __iconNode$c);
+/**
+ * @license lucide-react v0.511.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */
+const __iconNode$b = [
+  ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
+  ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
+];
+const Search = createLucideIcon("search", __iconNode$b);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21958,10 +22793,16 @@ const Save = createLucideIcon("save", __iconNode$b);
  * See the LICENSE file in the root directory of this source tree.
  */
 const __iconNode$a = [
-  ["path", { d: "m21 21-4.34-4.34", key: "14j7rj" }],
-  ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }]
+  [
+    "path",
+    {
+      d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",
+      key: "1qme2f"
+    }
+  ],
+  ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
 ];
-const Search = createLucideIcon("search", __iconNode$a);
+const Settings = createLucideIcon("settings", __iconNode$a);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -21972,13 +22813,13 @@ const __iconNode$9 = [
   [
     "path",
     {
-      d: "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z",
-      key: "1qme2f"
+      d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+      key: "oel41y"
     }
   ],
-  ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
+  ["path", { d: "m9 12 2 2 4-4", key: "dzmm74" }]
 ];
-const Settings = createLucideIcon("settings", __iconNode$9);
+const ShieldCheck = createLucideIcon("shield-check", __iconNode$9);
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -22106,7 +22947,22 @@ const pageTitles = {
   reviews: "Reviews",
   settings: "Settings"
 };
-function Navbar({ currentPage, onMenuToggle }) {
+function getInitials(name) {
+  const segments = name.trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  if (segments.length === 0) {
+    return "AD";
+  }
+  return segments.map((segment) => {
+    var _a2;
+    return ((_a2 = segment[0]) == null ? void 0 : _a2.toUpperCase()) ?? "";
+  }).join("");
+}
+function Navbar({
+  currentPage,
+  onMenuToggle,
+  adminDisplayName,
+  onLogout
+}) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "h-16 flex items-center gap-4 px-6 bg-card border-b border-border shrink-0", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       Button,
@@ -22150,14 +23006,27 @@ function Navbar({ currentPage, onMenuToggle }) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "div",
       {
-        className: "flex items-center gap-2 cursor-pointer group",
+        className: "hidden md:flex items-center gap-2 rounded-full border border-border bg-muted/30 px-3 py-1.5",
         "data-ocid": "navbar-profile",
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Avatar, { className: "w-8 h-8 border border-border", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AvatarFallback, { className: "bg-primary/10 text-primary text-xs font-semibold", children: "AD" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "hidden md:flex flex-col leading-none", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-foreground", children: "Admin" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-muted-foreground", children: "admin@luxe.co" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Avatar, { className: "w-8 h-8 border border-border", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AvatarFallback, { className: "bg-primary/10 text-primary text-xs font-semibold", children: getInitials(adminDisplayName) }) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col leading-none", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm font-medium text-foreground", children: adminDisplayName }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-muted-foreground", children: "Token session" })
           ] })
+        ]
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      Button,
+      {
+        variant: "outline",
+        size: "sm",
+        onClick: onLogout,
+        "data-ocid": "logout-button",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(LogOut, { className: "w-4 h-4" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: "Logout" })
         ]
       }
     )
@@ -22241,7 +23110,13 @@ function Sidebar({
     }
   );
 }
-function Layout({ currentPage, onNavigate, children }) {
+function Layout({
+  currentPage,
+  onNavigate,
+  adminDisplayName,
+  onLogout,
+  children
+}) {
   const { settings } = useThemeStore();
   const [collapsed, setCollapsed] = reactExports.useState(false);
   const [mobileOpen, setMobileOpen] = reactExports.useState(false);
@@ -22311,7 +23186,9 @@ function Layout({ currentPage, onNavigate, children }) {
         Navbar,
         {
           currentPage,
-          onMenuToggle: () => setMobileOpen((v2) => !v2)
+          onMenuToggle: () => setMobileOpen((v2) => !v2),
+          adminDisplayName,
+          onLogout
         }
       ),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -25179,6 +26056,40 @@ const Toaster = ({ ...props }) => {
     }
   );
 };
+function Skeleton({ className, ...props }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      "data-slot": "skeleton",
+      className: cn("bg-accent animate-pulse rounded-md", className),
+      ...props
+    }
+  );
+}
+function TableSkeleton({ rows = 5, columns = 4 }) {
+  const headerCols = Array.from({ length: columns }, (_, n2) => `hc${n2}`);
+  const rowItems = Array.from({ length: rows }, (_, n2) => `r${n2}`);
+  const colItems = Array.from({ length: columns }, (_, n2) => `c${n2}`);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "grid gap-4",
+        style: { gridTemplateColumns: `repeat(${columns}, 1fr)` },
+        children: headerCols.map((k2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Skeleton, { className: "h-4 rounded" }, k2))
+      }
+    ),
+    rowItems.map((rowKey) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        className: "grid gap-4",
+        style: { gridTemplateColumns: `repeat(${columns}, 1fr)` },
+        children: colItems.map((colKey) => /* @__PURE__ */ jsxRuntimeExports.jsx(Skeleton, { className: "h-9 rounded" }, `${rowKey}-${colKey}`))
+      },
+      rowKey
+    ))
+  ] });
+}
 function Dialog({
   ...props
 }) {
@@ -25407,377 +26318,335 @@ function TableCell({ className, ...props }) {
     }
   );
 }
-const mockInquiries = [
-  {
-    id: "inq-1",
-    name: "Isabelle Marchetti",
-    email: "isabelle@example.com",
-    phone: "+1 (555) 201-4821",
-    message: "I'm interested in a custom walnut dining table for a 12-person setting. Could you provide a quote and lead time?",
-    date: "2026-04-08",
-    status: "new"
-  },
-  {
-    id: "inq-2",
-    name: "Thomas Beaumont",
-    email: "t.beaumont@example.com",
-    phone: "+1 (555) 374-9012",
-    message: "Looking for a bespoke Chesterfield sofa in cognac leather. Do you offer that finish?",
-    date: "2026-04-07",
-    status: "replied"
-  },
-  {
-    id: "inq-3",
-    name: "Sofia Delacroix",
-    email: "sofia.d@example.com",
-    phone: "+44 20 7946 0823",
-    message: "We are furnishing a penthouse and would love a complete consultation for living and dining areas.",
-    date: "2026-04-06",
-    status: "new"
-  },
-  {
-    id: "inq-4",
-    name: "Marcus Holloway",
-    email: "m.holloway@design.co",
-    phone: "+1 (555) 482-3319",
-    message: "I need fabric swatches for the Lyon sectional before committing to an order. Can you send samples?",
-    date: "2026-04-05",
-    status: "replied"
-  },
-  {
-    id: "inq-5",
-    name: "Priya Nair",
-    email: "priya.n@interiors.in",
-    phone: "+91 98765 43210",
-    message: "Interested in your brass accent lighting collection. What are current stock levels?",
-    date: "2026-04-04",
-    status: "closed"
-  },
-  {
-    id: "inq-6",
-    name: "Julian Ferrara",
-    email: "julian.f@example.com",
-    phone: "+39 06 4567 8901",
-    message: "We'd like to discuss a commercial project — 40-room boutique hotel lobby and suites.",
-    date: "2026-04-03",
-    status: "new"
-  },
-  {
-    id: "inq-7",
-    name: "Amelia Forsythe",
-    email: "aforsythe@realty.com",
-    phone: "+1 (555) 619-7720",
-    message: "Staging three luxury apartments in Manhattan. Looking for a curated package deal.",
-    date: "2026-04-02",
-    status: "replied"
-  },
-  {
-    id: "inq-8",
-    name: "Chen Wei",
-    email: "chenwei@luxliving.cn",
-    phone: "+86 138 0013 8000",
-    message: "Do you ship to Shanghai? Interested in the Avante bed frame in white oak.",
-    date: "2026-04-01",
-    status: "new"
-  },
-  {
-    id: "inq-9",
-    name: "Lucía Romero",
-    email: "lucia.r@example.es",
-    phone: "+34 91 234 5678",
-    message: "Can the Riviera bookcase be made to a custom height of 280cm for our library?",
-    date: "2026-03-30",
-    status: "closed"
-  },
-  {
-    id: "inq-10",
-    name: "Ethan Blackwood",
-    email: "ethan.b@studio.io",
-    phone: "+1 (555) 758-4490",
-    message: "Would love to visit your showroom next Thursday. Are appointments required?",
-    date: "2026-03-28",
-    status: "replied"
+const DEFAULT_LOCAL_API_BASE_URL = "http://localhost:7000/jpm";
+const ADMIN_SESSION_STORAGE_KEY = "jpmAdminSession";
+function normalizeText(value) {
+  return (value == null ? void 0 : value.trim()) ?? "";
+}
+function stripTrailingSlash(value) {
+  return value.replace(/\/+$/, "");
+}
+function joinUrl(baseUrl, path) {
+  return `${stripTrailingSlash(baseUrl)}/${path.replace(/^\/+/, "")}`;
+}
+function getDefaultAdminApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return DEFAULT_LOCAL_API_BASE_URL;
   }
-];
-const mockCategories = [
-  {
-    id: "cat-1",
-    name: "Seating",
-    slug: "seating",
-    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&q=80"
-  },
-  {
-    id: "cat-2",
-    name: "Dining",
-    slug: "dining",
-    image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=400&q=80"
-  },
-  {
-    id: "cat-3",
-    name: "Bedroom",
-    slug: "bedroom",
-    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=400&q=80"
-  },
-  {
-    id: "cat-4",
-    name: "Storage",
-    slug: "storage",
-    image: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=400&q=80"
-  },
-  {
-    id: "cat-5",
-    name: "Lighting",
-    slug: "lighting",
-    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&q=80"
+  const isLocalDev = ["localhost", "127.0.0.1"].includes(
+    window.location.hostname
+  );
+  if (isLocalDev) {
+    return DEFAULT_LOCAL_API_BASE_URL;
   }
-];
-const mockProducts = [
-  {
-    id: "prod-1",
-    name: "Lyon Sectional Sofa",
-    description: "Deep-seated corner sofa in sand-coloured bouclé with solid oak legs.",
-    price: 4850,
-    category: "Seating",
-    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80",
-    featured: true
-  },
-  {
-    id: "prod-2",
-    name: "Avante Bed Frame",
-    description: "Minimalist platform bed in white oak with integrated nightstand shelves.",
-    price: 2990,
-    category: "Bedroom",
-    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&q=80",
-    featured: true
-  },
-  {
-    id: "prod-3",
-    name: "Walnut Dining Table",
-    description: "Solid European walnut slab dining table, seats 8–10, handcrafted to order.",
-    price: 6200,
-    category: "Dining",
-    image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600&q=80",
-    featured: false
-  },
-  {
-    id: "prod-4",
-    name: "Riviera Bookcase",
-    description: "Open shelving bookcase in powder-coated steel and tempered glass.",
-    price: 1680,
-    category: "Storage",
-    image: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80",
-    featured: false
-  },
-  {
-    id: "prod-5",
-    name: "Chesterfield Armchair",
-    description: "Button-tufted cognac leather armchair with handcut brass nailhead trim.",
-    price: 3200,
-    category: "Seating",
-    image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
-    featured: true
-  },
-  {
-    id: "prod-6",
-    name: "Cascade Pendant Light",
-    description: "Brushed brass pendant with hand-blown amber glass globe, dimmable.",
-    price: 890,
-    category: "Lighting",
-    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600&q=80",
-    featured: false
-  },
-  {
-    id: "prod-7",
-    name: "Palermo Console Table",
-    description: "Slender marble-top console on bronzed steel hairpin legs.",
-    price: 1950,
-    category: "Dining",
-    image: "https://images.unsplash.com/photo-1594026112284-02bb6f3352fe?w=600&q=80",
-    featured: false
-  },
-  {
-    id: "prod-8",
-    name: "Oslo Wardrobe",
-    description: "Floor-to-ceiling wardrobe system in smoked ash with push-to-open doors.",
-    price: 5400,
-    category: "Bedroom",
-    image: "https://images.unsplash.com/photo-1558997519-83ea9252edc8?w=600&q=80",
-    featured: true
+  return "/jpm";
+}
+function resolveAdminApiBaseUrl(value) {
+  const envBaseUrl = normalizeText(
+    void 0
+  );
+  return stripTrailingSlash(
+    normalizeText(value) || envBaseUrl || getDefaultAdminApiBaseUrl()
+  );
+}
+function createAdminSession(input) {
+  const token = normalizeText(input.token);
+  if (!token) {
+    throw new Error("Admin token is required.");
   }
-];
-const mockGallery = [
-  {
-    id: "gal-1",
-    url: "https://images.unsplash.com/photo-1618220179428-22790b461013?w=600&q=80",
-    caption: "Penthouse Living Room — Milan"
-  },
-  {
-    id: "gal-2",
-    url: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
-    caption: "Reading Nook — Paris Apartment"
-  },
-  {
-    id: "gal-3",
-    url: "https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&q=80",
-    caption: "Open-Plan Kitchen & Dining — London"
-  },
-  {
-    id: "gal-4",
-    url: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&q=80",
-    caption: "Master Suite — Monaco Villa"
-  },
-  {
-    id: "gal-5",
-    url: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&q=80",
-    caption: "Walk-in Wardrobe — Dubai Penthouse"
-  },
-  {
-    id: "gal-6",
-    url: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600&q=80",
-    caption: "Dining Room — Manhattan Loft"
-  },
-  {
-    id: "gal-7",
-    url: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80",
-    caption: "Family Lounge — Hamptons Beach House"
-  },
-  {
-    id: "gal-8",
-    url: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80",
-    caption: "Home Office — Berlin Townhouse"
-  },
-  {
-    id: "gal-9",
-    url: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600&q=80",
-    caption: "Entryway — Geneva Chalet"
-  },
-  {
-    id: "gal-10",
-    url: "https://images.unsplash.com/photo-1594026112284-02bb6f3352fe?w=600&q=80",
-    caption: "Powder Room — Hong Kong Flat"
-  },
-  {
-    id: "gal-11",
-    url: "https://images.unsplash.com/photo-1558997519-83ea9252edc8?w=600&q=80",
-    caption: "Dressing Room — Tokyo Residence"
-  },
-  {
-    id: "gal-12",
-    url: "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=600&q=80",
-    caption: "Terrace Lounge — Amalfi Retreat"
+  return {
+    token,
+    baseUrl: resolveAdminApiBaseUrl(input.baseUrl),
+    displayName: normalizeText(input.displayName) || "Admin"
+  };
+}
+function loadStoredAdminSession() {
+  if (typeof window === "undefined") {
+    return null;
   }
-];
-const mockReviews = [
-  {
-    id: "rev-1",
-    clientName: "Isabelle Fontaine",
-    message: "Absolutely impeccable craftsmanship. The walnut dining table arrived and transformed our home instantly. Every guest asks about it.",
-    rating: 5,
-    image: "https://images.unsplash.com/photo-1494790108755-2616b612b5b4?w=200&q=80"
-  },
-  {
-    id: "rev-2",
-    clientName: "James Whitmore",
-    message: "Superb quality and the delivery team were professional and careful. The Chesterfield armchair is a statement piece.",
-    rating: 5
-  },
-  {
-    id: "rev-3",
-    clientName: "Camille Dubois",
-    message: "The bouclé sectional is even more beautiful in person than in the photos. Highly recommend the design consultation service.",
-    rating: 4,
-    image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80"
-  },
-  {
-    id: "rev-4",
-    clientName: "Raj Kapoor",
-    message: "Great product, slightly longer lead time than expected but the end result was worth every day of waiting.",
-    rating: 4
-  },
-  {
-    id: "rev-5",
-    clientName: "Natasha Volkov",
-    message: "Our hotel lobby has been completely transformed with LuxeAdmin pieces. Guests consistently compliment the atmosphere.",
-    rating: 5,
-    image: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=200&q=80"
-  },
-  {
-    id: "rev-6",
-    clientName: "Lorenzo Esposito",
-    message: "The Oslo wardrobe fit our space perfectly and the push-to-open mechanism is silently smooth. Pure luxury.",
-    rating: 5
+  try {
+    const stored = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+    if (!stored) {
+      return null;
+    }
+    const parsed = JSON.parse(stored);
+    if (!normalizeText(parsed.token)) {
+      return null;
+    }
+    return createAdminSession({
+      token: parsed.token ?? "",
+      baseUrl: parsed.baseUrl,
+      displayName: parsed.displayName
+    });
+  } catch {
+    return null;
   }
-];
-const mockStats = {
-  totalVisits: 12840,
-  totalInquiries: 247,
-  featuredProducts: mockProducts.filter((p2) => p2.featured).length,
-  galleryImages: mockGallery.length
-};
+}
+function saveAdminSession(session) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+function clearAdminSession() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
+}
+function resolveRequestSession(sessionOverride) {
+  const storedSession = loadStoredAdminSession();
+  const token = normalizeText(sessionOverride == null ? void 0 : sessionOverride.token) || normalizeText(storedSession == null ? void 0 : storedSession.token);
+  if (!token) {
+    throw new Error("Please log in to continue.");
+  }
+  return createAdminSession({
+    token,
+    baseUrl: (sessionOverride == null ? void 0 : sessionOverride.baseUrl) ?? (storedSession == null ? void 0 : storedSession.baseUrl),
+    displayName: (sessionOverride == null ? void 0 : sessionOverride.displayName) ?? (storedSession == null ? void 0 : storedSession.displayName)
+  });
+}
+function resolveAdminAssetUrl(assetPath, baseUrl) {
+  const normalizedAssetPath = normalizeText(assetPath);
+  if (!normalizedAssetPath || typeof window === "undefined") {
+    return normalizedAssetPath;
+  }
+  try {
+    const absoluteBaseUrl = new URL(baseUrl, window.location.origin).toString();
+    return new URL(normalizedAssetPath, absoluteBaseUrl).toString();
+  } catch {
+    return normalizedAssetPath;
+  }
+}
+async function requestAdminApi(path, init = {}, options = {}) {
+  const session = resolveRequestSession(options.session);
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  headers.set("Authorization", `Bearer ${session.token}`);
+  if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  const response = await fetch(joinUrl(session.baseUrl, path), {
+    ...init,
+    headers
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  const isJson = contentType.includes("application/json");
+  const responseData = isJson ? await response.json() : await response.text();
+  if (!response.ok) {
+    const message = typeof responseData === "object" && responseData !== null && "message" in responseData && typeof responseData.message === "string" ? responseData.message : response.statusText || "Request failed.";
+    throw new Error(message);
+  }
+  return { data: responseData, session };
+}
+function normalizeCategory(category, baseUrl) {
+  return {
+    ...category,
+    description: category.description ?? "",
+    image: resolveAdminAssetUrl(category.image, baseUrl),
+    imageKey: category.imageKey ?? "",
+    isActive: Boolean(category.isActive)
+  };
+}
+function buildCategoryPayload(input) {
+  const payload = {
+    name: input.name.trim(),
+    slug: input.slug.trim()
+  };
+  if (input.description !== void 0) {
+    payload.description = input.description.trim();
+  }
+  if (input.isActive !== void 0) {
+    payload.isActive = String(input.isActive);
+  }
+  if (input.imageFile) {
+    const formData = new FormData();
+    for (const [key, value] of Object.entries(payload)) {
+      formData.set(key, value);
+    }
+    formData.set("image", input.imageFile);
+    return formData;
+  }
+  return JSON.stringify(payload);
+}
+async function listCategories() {
+  const { data, session } = await requestAdminApi("/admin/categories");
+  return data.categories.map(
+    (category) => normalizeCategory(category, session.baseUrl)
+  );
+}
+async function createCategory(input) {
+  const { data, session } = await requestAdminApi(
+    "/admin/categories",
+    {
+      method: "POST",
+      body: buildCategoryPayload(input)
+    }
+  );
+  return normalizeCategory(data.category, session.baseUrl);
+}
+async function updateCategory(id, input) {
+  const { data, session } = await requestAdminApi(
+    `/admin/categories/${id}`,
+    {
+      method: "PUT",
+      body: buildCategoryPayload(input)
+    }
+  );
+  return normalizeCategory(data.category, session.baseUrl);
+}
+async function deleteCategory(id) {
+  const { data } = await requestAdminApi(
+    `/admin/categories/${id}`,
+    {
+      method: "DELETE"
+    }
+  );
+  return data;
+}
 function slugify(text) {
   return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
 }
-const emptyForm$1 = { name: "", slug: "", image: "" };
+function getErrorMessage$1(error) {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+const emptyForm$1 = { name: "", slug: "" };
+const categoriesQueryKey = ["admin", "categories"];
 function CategoriesPage() {
-  const [categories, setCategories] = reactExports.useState(mockCategories);
+  const queryClient2 = useQueryClient();
   const [modalOpen, setModalOpen] = reactExports.useState(false);
   const [deleteId, setDeleteId] = reactExports.useState(null);
   const [editing, setEditing] = reactExports.useState(null);
   const [form, setForm] = reactExports.useState(emptyForm$1);
   const [preview, setPreview] = reactExports.useState("");
+  const [selectedImageFile, setSelectedImageFile] = reactExports.useState(null);
   const fileInputRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    if (!modalOpen) {
-      if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
+  const categoriesQuery = useQuery({
+    queryKey: categoriesQueryKey,
+    queryFn: listCategories
+  });
+  const saveCategoryMutation = useMutation({
+    mutationFn: async ({ id, mode, values }) => {
+      if (mode === "update" && id) {
+        return updateCategory(id, values);
+      }
+      return createCategory(values);
+    },
+    onSuccess: async (_, variables) => {
+      await queryClient2.invalidateQueries({ queryKey: categoriesQueryKey });
+      setModalOpen(false);
+      setEditing(null);
+      setForm(emptyForm$1);
+      setPreview("");
+      setSelectedImageFile(null);
+      clearFileInput();
+      ue.success(
+        variables.mode === "update" ? "Category updated" : "Category added"
+      );
+    },
+    onError: (error) => {
+      ue.error(getErrorMessage$1(error));
     }
-  }, [modalOpen, preview]);
+  });
+  const deleteCategoryMutation = useMutation({
+    mutationFn: deleteCategory,
+    onSuccess: async () => {
+      await queryClient2.invalidateQueries({ queryKey: categoriesQueryKey });
+      setDeleteId(null);
+      ue.success("Category deleted");
+    },
+    onError: (error) => {
+      ue.error(getErrorMessage$1(error));
+    }
+  });
+  const categories = categoriesQuery.data ?? [];
+  const isSaving = saveCategoryMutation.isPending;
+  const isDeleting = deleteCategoryMutation.isPending;
+  reactExports.useEffect(() => {
+    return () => {
+      if (preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
+  function clearFileInput() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
   function openAdd() {
     setEditing(null);
     setForm(emptyForm$1);
     setPreview("");
+    setSelectedImageFile(null);
+    clearFileInput();
     setModalOpen(true);
   }
-  function openEdit(cat) {
-    setEditing(cat);
-    setForm({ name: cat.name, slug: cat.slug, image: cat.image });
-    setPreview(cat.image);
+  function openEdit(category) {
+    setEditing(category);
+    setForm({ name: category.name, slug: category.slug });
+    setPreview(category.image);
+    setSelectedImageFile(null);
+    clearFileInput();
     setModalOpen(true);
   }
   function handleClose() {
+    if (isSaving) {
+      return;
+    }
     setModalOpen(false);
+    setSelectedImageFile(null);
+    clearFileInput();
+  }
+  function handleDeleteClose() {
+    if (isDeleting) {
+      return;
+    }
+    setDeleteId(null);
   }
   function handleImageChange(e3) {
     var _a2;
     const file = (_a2 = e3.target.files) == null ? void 0 : _a2[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPreview(url);
-      setForm((f2) => ({ ...f2, image: url }));
+    if (!file) {
+      return;
     }
+    setSelectedImageFile(file);
+    setPreview(URL.createObjectURL(file));
   }
   function handleNameChange(name) {
-    setForm((f2) => ({ ...f2, name, slug: slugify(name) }));
+    setForm((currentForm) => ({
+      ...currentForm,
+      name,
+      slug: currentForm.slug === slugify(currentForm.name) ? slugify(name) : currentForm.slug
+    }));
   }
   function handleSave() {
-    if (!form.name.trim()) {
+    const name = form.name.trim();
+    const slug = slugify(form.slug || form.name);
+    if (!name) {
       ue.error("Category name is required");
       return;
     }
-    if (editing) {
-      setCategories(
-        (cats) => cats.map((c2) => c2.id === editing.id ? { ...editing, ...form } : c2)
-      );
-      ue.success("Category updated");
-    } else {
-      setCategories((cats) => [...cats, { id: `cat-${Date.now()}`, ...form }]);
-      ue.success("Category added");
+    if (!slug) {
+      ue.error("Category slug is required");
+      return;
     }
-    setModalOpen(false);
+    saveCategoryMutation.mutate({
+      id: editing == null ? void 0 : editing.id,
+      mode: editing ? "update" : "create",
+      values: {
+        name,
+        slug,
+        isActive: editing ? void 0 : true,
+        imageFile: selectedImageFile
+      }
+    });
   }
-  function handleDelete(id) {
-    setCategories((cats) => cats.filter((c2) => c2.id !== id));
-    setDeleteId(null);
-    ue.success("Category deleted");
+  function confirmDelete() {
+    if (!deleteId) {
+      return;
+    }
+    deleteCategoryMutation.mutate(deleteId);
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -25791,7 +26660,7 @@ function CategoriesPage() {
         ] })
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-card border border-border rounded-xl shadow-subtle overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Table, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-card border border-border rounded-xl shadow-subtle overflow-hidden", children: categoriesQuery.isLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableSkeleton, { rows: 5, columns: 4 }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Table, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(TableHeader, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(TableRow, { className: "border-border hover:bg-transparent", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "w-16 text-muted-foreground font-medium", children: "Image" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "text-muted-foreground font-medium", children: "Name" }),
@@ -25799,7 +26668,19 @@ function CategoriesPage() {
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "w-28 text-right text-muted-foreground font-medium", children: "Actions" })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(TableBody, { children: [
-        categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 4, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 4, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-12 text-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: getErrorMessage$1(categoriesQuery.error) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Button,
+            {
+              variant: "outline",
+              size: "sm",
+              onClick: () => categoriesQuery.refetch(),
+              children: "Retry"
+            }
+          )
+        ] }) }) }),
+        !categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 4, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
             className: "flex flex-col items-center justify-center py-12 text-muted-foreground gap-3",
@@ -25814,24 +26695,24 @@ function CategoriesPage() {
             ]
           }
         ) }) }),
-        categories.map((cat) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        categories.map((category) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
           TableRow,
           {
             className: "border-border hover:bg-muted/40 transition-colors duration-150",
             "data-ocid": "category-row",
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: cat.image ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: category.image ? /* @__PURE__ */ jsxRuntimeExports.jsx(
                 "img",
                 {
-                  src: cat.image,
-                  alt: cat.name,
+                  src: category.image,
+                  alt: category.name,
                   className: "w-10 h-10 rounded-md object-cover border border-border"
                 }
               ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-10 h-10 rounded-md bg-muted border border-border flex items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderOpen, { className: "w-4 h-4 text-muted-foreground" }) }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-foreground", children: cat.name }) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-foreground", children: category.name }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-muted-foreground font-mono", children: [
                 "/",
-                cat.slug
+                category.slug
               ] }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-1.5", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -25840,9 +26721,10 @@ function CategoriesPage() {
                     variant: "ghost",
                     size: "icon",
                     className: "h-8 w-8 hover:bg-accent/50 hover:text-accent-foreground",
-                    onClick: () => openEdit(cat),
-                    "aria-label": `Edit ${cat.name}`,
+                    onClick: () => openEdit(category),
+                    "aria-label": `Edit ${category.name}`,
                     "data-ocid": "edit-category",
+                    disabled: isSaving || isDeleting,
                     children: /* @__PURE__ */ jsxRuntimeExports.jsx(Pencil, { className: "w-3.5 h-3.5" })
                   }
                 ),
@@ -25852,16 +26734,17 @@ function CategoriesPage() {
                     variant: "ghost",
                     size: "icon",
                     className: "h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive",
-                    onClick: () => setDeleteId(cat.id),
-                    "aria-label": `Delete ${cat.name}`,
+                    onClick: () => setDeleteId(category.id),
+                    "aria-label": `Delete ${category.name}`,
                     "data-ocid": "delete-category",
+                    disabled: isSaving || isDeleting,
                     children: /* @__PURE__ */ jsxRuntimeExports.jsx(Trash2, { className: "w-3.5 h-3.5" })
                   }
                 )
               ] }) })
             ]
           },
-          cat.id
+          category.id
         ))
       ] })
     ] }) }),
@@ -25872,8 +26755,16 @@ function CategoriesPage() {
         onClose: handleClose,
         title: editing ? "Edit Category" : "Add Category",
         footer: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { onClick: handleSave, "data-ocid": "save-category", children: editing ? "Save Changes" : "Add Category" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "ghost", onClick: handleClose, children: "Cancel" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Button,
+            {
+              onClick: handleSave,
+              "data-ocid": "save-category",
+              disabled: isSaving,
+              children: isSaving ? editing ? "Saving..." : "Adding..." : editing ? "Save Changes" : "Add Category"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "ghost", onClick: handleClose, disabled: isSaving, children: "Cancel" })
         ] }),
         children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -25900,7 +26791,10 @@ function CategoriesPage() {
               {
                 id: "cat-slug",
                 value: form.slug,
-                onChange: (e3) => setForm((f2) => ({ ...f2, slug: e3.target.value })),
+                onChange: (e3) => setForm((currentForm) => ({
+                  ...currentForm,
+                  slug: e3.target.value
+                })),
                 placeholder: "e.g. seating",
                 className: "mt-1 font-mono text-sm",
                 "data-ocid": "category-slug-input"
@@ -25938,7 +26832,7 @@ function CategoriesPage() {
       Modal,
       {
         open: !!deleteId,
-        onClose: () => setDeleteId(null),
+        onClose: handleDeleteClose,
         title: "Delete Category",
         description: "Are you sure you want to delete this category? This action cannot be undone.",
         footer: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
@@ -25946,12 +26840,21 @@ function CategoriesPage() {
             Button,
             {
               variant: "destructive",
-              onClick: () => deleteId && handleDelete(deleteId),
+              onClick: confirmDelete,
               "data-ocid": "confirm-delete",
-              children: "Delete"
+              disabled: isDeleting,
+              children: isDeleting ? "Deleting..." : "Delete"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "ghost", onClick: () => setDeleteId(null), children: "Cancel" })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Button,
+            {
+              variant: "ghost",
+              onClick: handleDeleteClose,
+              disabled: isDeleting,
+              children: "Cancel"
+            }
+          )
         ] }),
         children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", {})
       }
@@ -46993,40 +47896,6 @@ var BarChart = generateCategoricalChart({
   }],
   formatAxisMap
 });
-function Skeleton({ className, ...props }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      "data-slot": "skeleton",
-      className: cn("bg-accent animate-pulse rounded-md", className),
-      ...props
-    }
-  );
-}
-function TableSkeleton({ rows = 5, columns = 4 }) {
-  const headerCols = Array.from({ length: columns }, (_, n2) => `hc${n2}`);
-  const rowItems = Array.from({ length: rows }, (_, n2) => `r${n2}`);
-  const colItems = Array.from({ length: columns }, (_, n2) => `c${n2}`);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "grid gap-4",
-        style: { gridTemplateColumns: `repeat(${columns}, 1fr)` },
-        children: headerCols.map((k2) => /* @__PURE__ */ jsxRuntimeExports.jsx(Skeleton, { className: "h-4 rounded" }, k2))
-      }
-    ),
-    rowItems.map((rowKey) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        className: "grid gap-4",
-        style: { gridTemplateColumns: `repeat(${columns}, 1fr)` },
-        children: colItems.map((colKey) => /* @__PURE__ */ jsxRuntimeExports.jsx(Skeleton, { className: "h-9 rounded" }, `${rowKey}-${colKey}`))
-      },
-      rowKey
-    ))
-  ] });
-}
 function Card({ className, ...props }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
@@ -47063,6 +47932,16 @@ function CardTitle({ className, ...props }) {
     }
   );
 }
+function CardDescription({ className, ...props }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      "data-slot": "card-description",
+      className: cn("text-muted-foreground text-sm", className),
+      ...props
+    }
+  );
+}
 function CardContent({ className, ...props }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
@@ -47073,6 +47952,313 @@ function CardContent({ className, ...props }) {
     }
   );
 }
+const mockInquiries = [
+  {
+    id: "inq-1",
+    name: "Isabelle Marchetti",
+    email: "isabelle@example.com",
+    phone: "+1 (555) 201-4821",
+    message: "I'm interested in a custom walnut dining table for a 12-person setting. Could you provide a quote and lead time?",
+    date: "2026-04-08",
+    status: "new"
+  },
+  {
+    id: "inq-2",
+    name: "Thomas Beaumont",
+    email: "t.beaumont@example.com",
+    phone: "+1 (555) 374-9012",
+    message: "Looking for a bespoke Chesterfield sofa in cognac leather. Do you offer that finish?",
+    date: "2026-04-07",
+    status: "replied"
+  },
+  {
+    id: "inq-3",
+    name: "Sofia Delacroix",
+    email: "sofia.d@example.com",
+    phone: "+44 20 7946 0823",
+    message: "We are furnishing a penthouse and would love a complete consultation for living and dining areas.",
+    date: "2026-04-06",
+    status: "new"
+  },
+  {
+    id: "inq-4",
+    name: "Marcus Holloway",
+    email: "m.holloway@design.co",
+    phone: "+1 (555) 482-3319",
+    message: "I need fabric swatches for the Lyon sectional before committing to an order. Can you send samples?",
+    date: "2026-04-05",
+    status: "replied"
+  },
+  {
+    id: "inq-5",
+    name: "Priya Nair",
+    email: "priya.n@interiors.in",
+    phone: "+91 98765 43210",
+    message: "Interested in your brass accent lighting collection. What are current stock levels?",
+    date: "2026-04-04",
+    status: "closed"
+  },
+  {
+    id: "inq-6",
+    name: "Julian Ferrara",
+    email: "julian.f@example.com",
+    phone: "+39 06 4567 8901",
+    message: "We'd like to discuss a commercial project — 40-room boutique hotel lobby and suites.",
+    date: "2026-04-03",
+    status: "new"
+  },
+  {
+    id: "inq-7",
+    name: "Amelia Forsythe",
+    email: "aforsythe@realty.com",
+    phone: "+1 (555) 619-7720",
+    message: "Staging three luxury apartments in Manhattan. Looking for a curated package deal.",
+    date: "2026-04-02",
+    status: "replied"
+  },
+  {
+    id: "inq-8",
+    name: "Chen Wei",
+    email: "chenwei@luxliving.cn",
+    phone: "+86 138 0013 8000",
+    message: "Do you ship to Shanghai? Interested in the Avante bed frame in white oak.",
+    date: "2026-04-01",
+    status: "new"
+  },
+  {
+    id: "inq-9",
+    name: "Lucía Romero",
+    email: "lucia.r@example.es",
+    phone: "+34 91 234 5678",
+    message: "Can the Riviera bookcase be made to a custom height of 280cm for our library?",
+    date: "2026-03-30",
+    status: "closed"
+  },
+  {
+    id: "inq-10",
+    name: "Ethan Blackwood",
+    email: "ethan.b@studio.io",
+    phone: "+1 (555) 758-4490",
+    message: "Would love to visit your showroom next Thursday. Are appointments required?",
+    date: "2026-03-28",
+    status: "replied"
+  }
+];
+const mockCategories = [
+  {
+    id: "cat-1",
+    name: "Seating",
+    slug: "seating",
+    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=400&q=80"
+  },
+  {
+    id: "cat-2",
+    name: "Dining",
+    slug: "dining",
+    image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=400&q=80"
+  },
+  {
+    id: "cat-3",
+    name: "Bedroom",
+    slug: "bedroom",
+    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=400&q=80"
+  },
+  {
+    id: "cat-4",
+    name: "Storage",
+    slug: "storage",
+    image: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=400&q=80"
+  },
+  {
+    id: "cat-5",
+    name: "Lighting",
+    slug: "lighting",
+    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&q=80"
+  }
+];
+const mockProducts = [
+  {
+    id: "prod-1",
+    name: "Lyon Sectional Sofa",
+    description: "Deep-seated corner sofa in sand-coloured bouclé with solid oak legs.",
+    price: 4850,
+    category: "Seating",
+    image: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80",
+    featured: true
+  },
+  {
+    id: "prod-2",
+    name: "Avante Bed Frame",
+    description: "Minimalist platform bed in white oak with integrated nightstand shelves.",
+    price: 2990,
+    category: "Bedroom",
+    image: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&q=80",
+    featured: true
+  },
+  {
+    id: "prod-3",
+    name: "Walnut Dining Table",
+    description: "Solid European walnut slab dining table, seats 8–10, handcrafted to order.",
+    price: 6200,
+    category: "Dining",
+    image: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600&q=80",
+    featured: false
+  },
+  {
+    id: "prod-4",
+    name: "Riviera Bookcase",
+    description: "Open shelving bookcase in powder-coated steel and tempered glass.",
+    price: 1680,
+    category: "Storage",
+    image: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80",
+    featured: false
+  },
+  {
+    id: "prod-5",
+    name: "Chesterfield Armchair",
+    description: "Button-tufted cognac leather armchair with handcut brass nailhead trim.",
+    price: 3200,
+    category: "Seating",
+    image: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
+    featured: true
+  },
+  {
+    id: "prod-6",
+    name: "Cascade Pendant Light",
+    description: "Brushed brass pendant with hand-blown amber glass globe, dimmable.",
+    price: 890,
+    category: "Lighting",
+    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600&q=80",
+    featured: false
+  },
+  {
+    id: "prod-7",
+    name: "Palermo Console Table",
+    description: "Slender marble-top console on bronzed steel hairpin legs.",
+    price: 1950,
+    category: "Dining",
+    image: "https://images.unsplash.com/photo-1594026112284-02bb6f3352fe?w=600&q=80",
+    featured: false
+  },
+  {
+    id: "prod-8",
+    name: "Oslo Wardrobe",
+    description: "Floor-to-ceiling wardrobe system in smoked ash with push-to-open doors.",
+    price: 5400,
+    category: "Bedroom",
+    image: "https://images.unsplash.com/photo-1558997519-83ea9252edc8?w=600&q=80",
+    featured: true
+  }
+];
+const mockGallery = [
+  {
+    id: "gal-1",
+    url: "https://images.unsplash.com/photo-1618220179428-22790b461013?w=600&q=80",
+    caption: "Penthouse Living Room — Milan"
+  },
+  {
+    id: "gal-2",
+    url: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=600&q=80",
+    caption: "Reading Nook — Paris Apartment"
+  },
+  {
+    id: "gal-3",
+    url: "https://images.unsplash.com/photo-1600210492493-0946911123ea?w=600&q=80",
+    caption: "Open-Plan Kitchen & Dining — London"
+  },
+  {
+    id: "gal-4",
+    url: "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?w=600&q=80",
+    caption: "Master Suite — Monaco Villa"
+  },
+  {
+    id: "gal-5",
+    url: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&q=80",
+    caption: "Walk-in Wardrobe — Dubai Penthouse"
+  },
+  {
+    id: "gal-6",
+    url: "https://images.unsplash.com/photo-1617806118233-18e1de247200?w=600&q=80",
+    caption: "Dining Room — Manhattan Loft"
+  },
+  {
+    id: "gal-7",
+    url: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=600&q=80",
+    caption: "Family Lounge — Hamptons Beach House"
+  },
+  {
+    id: "gal-8",
+    url: "https://images.unsplash.com/photo-1600585154526-990dced4db0d?w=600&q=80",
+    caption: "Home Office — Berlin Townhouse"
+  },
+  {
+    id: "gal-9",
+    url: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=600&q=80",
+    caption: "Entryway — Geneva Chalet"
+  },
+  {
+    id: "gal-10",
+    url: "https://images.unsplash.com/photo-1594026112284-02bb6f3352fe?w=600&q=80",
+    caption: "Powder Room — Hong Kong Flat"
+  },
+  {
+    id: "gal-11",
+    url: "https://images.unsplash.com/photo-1558997519-83ea9252edc8?w=600&q=80",
+    caption: "Dressing Room — Tokyo Residence"
+  },
+  {
+    id: "gal-12",
+    url: "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?w=600&q=80",
+    caption: "Terrace Lounge — Amalfi Retreat"
+  }
+];
+const mockReviews = [
+  {
+    id: "rev-1",
+    clientName: "Isabelle Fontaine",
+    message: "Absolutely impeccable craftsmanship. The walnut dining table arrived and transformed our home instantly. Every guest asks about it.",
+    rating: 5,
+    image: "https://images.unsplash.com/photo-1494790108755-2616b612b5b4?w=200&q=80"
+  },
+  {
+    id: "rev-2",
+    clientName: "James Whitmore",
+    message: "Superb quality and the delivery team were professional and careful. The Chesterfield armchair is a statement piece.",
+    rating: 5
+  },
+  {
+    id: "rev-3",
+    clientName: "Camille Dubois",
+    message: "The bouclé sectional is even more beautiful in person than in the photos. Highly recommend the design consultation service.",
+    rating: 4,
+    image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80"
+  },
+  {
+    id: "rev-4",
+    clientName: "Raj Kapoor",
+    message: "Great product, slightly longer lead time than expected but the end result was worth every day of waiting.",
+    rating: 4
+  },
+  {
+    id: "rev-5",
+    clientName: "Natasha Volkov",
+    message: "Our hotel lobby has been completely transformed with LuxeAdmin pieces. Guests consistently compliment the atmosphere.",
+    rating: 5,
+    image: "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?w=200&q=80"
+  },
+  {
+    id: "rev-6",
+    clientName: "Lorenzo Esposito",
+    message: "The Oslo wardrobe fit our space perfectly and the push-to-open mechanism is silently smooth. Pure luxury.",
+    rating: 5
+  }
+];
+const mockStats = {
+  totalVisits: 12840,
+  totalInquiries: 247,
+  featuredProducts: mockProducts.filter((p2) => p2.featured).length,
+  galleryImages: mockGallery.length
+};
 const chartData = [
   { month: "Jan", inquiries: 32 },
   { month: "Feb", inquiries: 45 },
@@ -47672,6 +48858,317 @@ function InquiriesPage() {
       }
     )
   ] });
+}
+const alertVariants = cva(
+  "relative w-full rounded-lg border px-4 py-3 text-sm grid has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] grid-cols-[0_1fr] has-[>svg]:gap-x-3 gap-y-0.5 items-start [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        destructive: "text-destructive bg-card [&>svg]:text-current *:data-[slot=alert-description]:text-destructive/90"
+      }
+    },
+    defaultVariants: {
+      variant: "default"
+    }
+  }
+);
+function Alert({
+  className,
+  variant,
+  ...props
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      "data-slot": "alert",
+      role: "alert",
+      className: cn(alertVariants({ variant }), className),
+      ...props
+    }
+  );
+}
+function AlertTitle({ className, ...props }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      "data-slot": "alert-title",
+      className: cn(
+        "col-start-2 line-clamp-1 min-h-4 font-medium tracking-tight",
+        className
+      ),
+      ...props
+    }
+  );
+}
+function AlertDescription({
+  className,
+  ...props
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
+    {
+      "data-slot": "alert-description",
+      className: cn(
+        "text-muted-foreground col-start-2 grid justify-items-start gap-1 text-sm [&_p]:leading-relaxed",
+        className
+      ),
+      ...props
+    }
+  );
+}
+var NAME$2 = "Separator";
+var DEFAULT_ORIENTATION = "horizontal";
+var ORIENTATIONS = ["horizontal", "vertical"];
+var Separator$1 = reactExports.forwardRef((props, forwardedRef) => {
+  const { decorative, orientation: orientationProp = DEFAULT_ORIENTATION, ...domProps } = props;
+  const orientation = isValidOrientation(orientationProp) ? orientationProp : DEFAULT_ORIENTATION;
+  const ariaOrientation = orientation === "vertical" ? orientation : void 0;
+  const semanticProps = decorative ? { role: "none" } : { "aria-orientation": ariaOrientation, role: "separator" };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Primitive$1.div,
+    {
+      "data-orientation": orientation,
+      ...semanticProps,
+      ...domProps,
+      ref: forwardedRef
+    }
+  );
+});
+Separator$1.displayName = NAME$2;
+function isValidOrientation(orientation) {
+  return ORIENTATIONS.includes(orientation);
+}
+var Root$1 = Separator$1;
+function Separator({
+  className,
+  orientation = "horizontal",
+  decorative = true,
+  ...props
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Root$1,
+    {
+      "data-slot": "separator",
+      decorative,
+      orientation,
+      className: cn(
+        "bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
+        className
+      ),
+      ...props
+    }
+  );
+}
+async function verifyAdminSession(session) {
+  await requestAdminApi("/admin/categories", void 0, { session });
+  return session;
+}
+async function loginAdmin(input) {
+  const session = createAdminSession(input);
+  await verifyAdminSession(session);
+  saveAdminSession(session);
+  return session;
+}
+function getStoredAdminSession() {
+  return loadStoredAdminSession();
+}
+function logoutAdmin() {
+  clearAdminSession();
+}
+const useAdminAuthStore = create((set) => ({
+  status: "checking",
+  session: null,
+  initAuth: async () => {
+    const storedSession = getStoredAdminSession();
+    if (!storedSession) {
+      set({ status: "unauthenticated", session: null });
+      return;
+    }
+    set({ status: "checking" });
+    try {
+      const verifiedSession = await verifyAdminSession(storedSession);
+      set({ status: "authenticated", session: verifiedSession });
+    } catch {
+      logoutAdmin();
+      set({ status: "unauthenticated", session: null });
+    }
+  },
+  login: async (input) => {
+    set({ status: "signing-in" });
+    try {
+      const session = await loginAdmin(input);
+      set({ status: "authenticated", session });
+      return session;
+    } catch (error) {
+      set({ status: "unauthenticated", session: null });
+      throw error;
+    }
+  },
+  logout: () => {
+    logoutAdmin();
+    set({ status: "unauthenticated", session: null });
+  }
+}));
+function getErrorMessage(error) {
+  return error instanceof Error ? error.message : "Unable to sign in.";
+}
+function LoginPage() {
+  const login = useAdminAuthStore((state) => state.login);
+  const authStatus = useAdminAuthStore((state) => state.status);
+  const [showToken, setShowToken] = reactExports.useState(false);
+  const [errorMessage, setErrorMessage] = reactExports.useState("");
+  const [form, setForm] = reactExports.useState({
+    displayName: "Admin",
+    baseUrl: getDefaultAdminApiBaseUrl(),
+    token: ""
+  });
+  const isSubmitting = authStatus === "signing-in";
+  const helperBaseUrl = reactExports.useMemo(() => getDefaultAdminApiBaseUrl(), []);
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setErrorMessage("");
+    try {
+      await login(form);
+      ue.success("Signed in successfully");
+    } catch (error) {
+      const message = getErrorMessage(error);
+      setErrorMessage(message);
+      ue.error(message);
+    }
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen bg-[radial-gradient(circle_at_top,_rgba(196,156,84,0.18),_transparent_40%),linear-gradient(180deg,_rgba(250,246,239,0.98),_rgba(245,238,228,0.92))] px-6 py-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "hidden rounded-[2rem] border border-border/60 bg-card/70 p-10 shadow-subtle backdrop-blur lg:flex lg:flex-col lg:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ShieldCheck, { className: "h-6 w-6" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium uppercase tracking-[0.24em] text-primary/80", children: "JPM Admin" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "max-w-lg font-display text-4xl font-semibold leading-tight text-foreground", children: "Sign in with your admin token to manage categories and the rest of the panel." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-base leading-7 text-muted-foreground", children: "Your current backend protects admin routes with a bearer token. This login screen verifies that token against the live API and stores the session locally for this browser." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Separator, {}),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-border bg-background/70 p-5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-foreground", children: "Token-based auth" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-muted-foreground", children: "Uses the same bearer token your Express middleware expects." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-border bg-background/70 p-5", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-foreground", children: "API URL aware" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-6 text-muted-foreground", children: [
+              "Works with local development at",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-foreground", children: [
+                " ",
+                helperBaseUrl
+              ] }),
+              "."
+            ] })
+          ] })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "border-border/70 bg-card/90 py-0 shadow-elevated backdrop-blur", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { className: "space-y-3 border-b border-border/70 py-8", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LockKeyhole, { className: "h-5 w-5" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { className: "font-display text-2xl text-foreground", children: "Admin Login" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { className: "leading-6", children: "Enter the admin token configured on your backend. The token is verified by calling the protected admin categories API." })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CardContent, { className: "py-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-5", onSubmit: handleSubmit, children: [
+        errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs(Alert, { variant: "destructive", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(KeyRound, {}),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertTitle, { children: "Sign-in failed" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: errorMessage })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-display-name", children: "Display Name" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Input,
+            {
+              id: "login-display-name",
+              value: form.displayName,
+              onChange: (event) => setForm((currentForm) => ({
+                ...currentForm,
+                displayName: event.target.value
+              })),
+              placeholder: "Admin",
+              "data-ocid": "login-display-name-input"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-base-url", children: "API Base URL" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            Input,
+            {
+              id: "login-base-url",
+              value: form.baseUrl,
+              onChange: (event) => setForm((currentForm) => ({
+                ...currentForm,
+                baseUrl: event.target.value
+              })),
+              placeholder: helperBaseUrl,
+              "data-ocid": "login-base-url-input"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
+            "Examples: ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: helperBaseUrl }),
+            " ",
+            "or ",
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: "/jpm" })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-token", children: "Admin Token" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              Input,
+              {
+                id: "login-token",
+                type: showToken ? "text" : "password",
+                value: form.token,
+                onChange: (event) => setForm((currentForm) => ({
+                  ...currentForm,
+                  token: event.target.value
+                })),
+                placeholder: "Enter your bearer token",
+                className: "pr-10",
+                "data-ocid": "login-token-input"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                className: "absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground",
+                onClick: () => setShowToken((currentValue) => !currentValue),
+                "aria-label": showToken ? "Hide admin token" : "Show admin token",
+                "data-ocid": "toggle-login-token-visibility",
+                children: showToken ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { className: "h-4 w-4" })
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          Button,
+          {
+            type: "submit",
+            className: "w-full",
+            size: "lg",
+            disabled: isSubmitting,
+            "data-ocid": "login-submit",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(LogIn, { className: "h-4 w-4" }),
+              isSubmitting ? "Signing In..." : "Sign In"
+            ]
+          }
+        )
+      ] }) })
+    ] })
+  ] }) }) });
 }
 const badgeVariants = cva(
   "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
@@ -49690,7 +51187,7 @@ const arrow = (options, deps) => {
     options: [options, deps]
   };
 };
-var NAME$2 = "Arrow";
+var NAME$1 = "Arrow";
 var Arrow$1 = reactExports.forwardRef((props, forwardedRef) => {
   const { children, width = 10, height = 5, ...arrowProps } = props;
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -49706,8 +51203,8 @@ var Arrow$1 = reactExports.forwardRef((props, forwardedRef) => {
     }
   );
 });
-Arrow$1.displayName = NAME$2;
-var Root$1 = Arrow$1;
+Arrow$1.displayName = NAME$1;
+var Root = Arrow$1;
 var POPPER_NAME = "Popper";
 var [createPopperContext, createPopperScope] = createContextScope(POPPER_NAME);
 var [PopperProvider, usePopperContext] = createPopperContext(POPPER_NAME);
@@ -49920,7 +51417,7 @@ var PopperArrow = reactExports.forwardRef(function PopperArrow2(props, forwarded
           visibility: contentContext.shouldHideArrow ? "hidden" : void 0
         },
         children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Root$1,
+          Root,
           {
             ...arrowProps,
             ref: forwardedRef,
@@ -49992,7 +51489,7 @@ var VISUALLY_HIDDEN_STYLES = Object.freeze({
   whiteSpace: "nowrap",
   wordWrap: "normal"
 });
-var NAME$1 = "VisuallyHidden";
+var NAME = "VisuallyHidden";
 var VisuallyHidden = reactExports.forwardRef(
   (props, forwardedRef) => {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -50005,7 +51502,7 @@ var VisuallyHidden = reactExports.forwardRef(
     );
   }
 );
-VisuallyHidden.displayName = NAME$1;
+VisuallyHidden.displayName = NAME;
 var OPEN_KEYS = [" ", "Enter", "ArrowUp", "ArrowDown"];
 var SELECTION_KEYS = [" ", "Enter"];
 var SELECT_NAME = "Select";
@@ -51901,49 +53398,6 @@ function ReviewsPage() {
     )
   ] });
 }
-var NAME = "Separator";
-var DEFAULT_ORIENTATION = "horizontal";
-var ORIENTATIONS = ["horizontal", "vertical"];
-var Separator$1 = reactExports.forwardRef((props, forwardedRef) => {
-  const { decorative, orientation: orientationProp = DEFAULT_ORIENTATION, ...domProps } = props;
-  const orientation = isValidOrientation(orientationProp) ? orientationProp : DEFAULT_ORIENTATION;
-  const ariaOrientation = orientation === "vertical" ? orientation : void 0;
-  const semanticProps = decorative ? { role: "none" } : { "aria-orientation": ariaOrientation, role: "separator" };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    Primitive$1.div,
-    {
-      "data-orientation": orientation,
-      ...semanticProps,
-      ...domProps,
-      ref: forwardedRef
-    }
-  );
-});
-Separator$1.displayName = NAME;
-function isValidOrientation(orientation) {
-  return ORIENTATIONS.includes(orientation);
-}
-var Root = Separator$1;
-function Separator({
-  className,
-  orientation = "horizontal",
-  decorative = true,
-  ...props
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    Root,
-    {
-      "data-slot": "separator",
-      decorative,
-      orientation,
-      className: cn(
-        "bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
-        className
-      ),
-      ...props
-    }
-  );
-}
 const SETTINGS_KEY = "adminSettings";
 function getDefaultSettings() {
   return {
@@ -52152,15 +53606,51 @@ function PageContent({ page }) {
       return /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsPage, {});
   }
 }
-function App() {
+function SessionLoader() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-screen items-center justify-center bg-background px-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-4 text-center", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ShieldCheck, { className: "h-6 w-6" }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-display text-xl font-semibold text-foreground", children: "Checking admin session" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: "Verifying your saved token with the backend." })
+    ] })
+  ] }) });
+}
+function AuthenticatedApp() {
+  const queryClient2 = useQueryClient();
+  const session = useAdminAuthStore((state) => state.session);
+  const logout = useAdminAuthStore((state) => state.logout);
   const [currentPage, setCurrentPage] = reactExports.useState("dashboard");
-  const { initTheme } = useThemeStore();
+  function handleLogout() {
+    queryClient2.clear();
+    logout();
+    setCurrentPage("dashboard");
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      Layout,
+      {
+        currentPage,
+        onNavigate: setCurrentPage,
+        adminDisplayName: (session == null ? void 0 : session.displayName) ?? "Admin",
+        onLogout: handleLogout,
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(PageContent, { page: currentPage })
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeCustomizer, {})
+  ] });
+}
+function App() {
+  const initTheme = useThemeStore((state) => state.initTheme);
+  const initAuth = useAdminAuthStore((state) => state.initAuth);
+  const authStatus = useAdminAuthStore((state) => state.status);
   reactExports.useEffect(() => {
     initTheme();
   }, [initTheme]);
+  reactExports.useEffect(() => {
+    void initAuth();
+  }, [initAuth]);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Layout, { currentPage, onNavigate: setCurrentPage, children: /* @__PURE__ */ jsxRuntimeExports.jsx(PageContent, { page: currentPage }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(ThemeCustomizer, {}),
+    authStatus === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx(SessionLoader, {}) : authStatus === "authenticated" ? /* @__PURE__ */ jsxRuntimeExports.jsx(AuthenticatedApp, {}) : /* @__PURE__ */ jsxRuntimeExports.jsx(LoginPage, {}),
     /* @__PURE__ */ jsxRuntimeExports.jsx(Toaster, { position: "bottom-right", richColors: true })
   ] });
 }

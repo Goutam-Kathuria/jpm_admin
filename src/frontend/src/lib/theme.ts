@@ -1,6 +1,10 @@
 export interface ThemeSettings {
   primaryColor: string;
   accentColor: string;
+  backgroundColor: string;
+  sidebarBgColor: string;
+  cardBgColor: string;
+  navbarBgColor: string;
   darkMode: boolean;
   fontStyle: "serif" | "sans";
   density: "compact" | "comfortable";
@@ -10,6 +14,10 @@ export interface ThemeSettings {
 export const defaultTheme: ThemeSettings = {
   primaryColor: "0.55 0.12 30",
   accentColor: "0.5 0.1 160",
+  backgroundColor: "0.96 0.015 75",
+  sidebarBgColor: "0.96 0.015 75",
+  cardBgColor: "0.98 0.01 75",
+  navbarBgColor: "0.96 0.015 75",
   darkMode: false,
   fontStyle: "serif",
   density: "comfortable",
@@ -42,6 +50,15 @@ export function applyTheme(settings: ThemeSettings): void {
 
   // Apply accent color
   root.style.setProperty("--accent", settings.accentColor);
+
+  // Apply background colors
+  root.style.setProperty("--background", settings.backgroundColor);
+  root.style.setProperty("--background-color", settings.backgroundColor);
+  root.style.setProperty("--sidebar", settings.sidebarBgColor);
+  root.style.setProperty("--sidebar-bg", settings.sidebarBgColor);
+  root.style.setProperty("--card", settings.cardBgColor);
+  root.style.setProperty("--card-bg", settings.cardBgColor);
+  root.style.setProperty("--navbar-bg", settings.navbarBgColor);
 
   // Apply font style
   if (settings.fontStyle === "sans") {
