@@ -21669,6 +21669,10 @@ function cn(...inputs) {
 const defaultTheme = {
   primaryColor: "0.55 0.12 30",
   accentColor: "0.5 0.1 160",
+  backgroundColor: "0.96 0.015 75",
+  sidebarBgColor: "0.96 0.015 75",
+  cardBgColor: "0.98 0.01 75",
+  navbarBgColor: "0.96 0.015 75",
   darkMode: false,
   fontStyle: "serif",
   density: "comfortable",
@@ -21692,6 +21696,13 @@ function applyTheme(settings) {
   root2.style.setProperty("--sidebar-primary", settings.primaryColor);
   root2.style.setProperty("--sidebar-ring", settings.primaryColor);
   root2.style.setProperty("--accent", settings.accentColor);
+  root2.style.setProperty("--background", settings.backgroundColor);
+  root2.style.setProperty("--background-color", settings.backgroundColor);
+  root2.style.setProperty("--sidebar", settings.sidebarBgColor);
+  root2.style.setProperty("--sidebar-bg", settings.sidebarBgColor);
+  root2.style.setProperty("--card", settings.cardBgColor);
+  root2.style.setProperty("--card-bg", settings.cardBgColor);
+  root2.style.setProperty("--navbar-bg", settings.navbarBgColor);
   if (settings.fontStyle === "sans") {
     root2.style.setProperty("--font-display", "'DM Sans'");
   } else {
@@ -25784,6 +25795,25 @@ const accentPresets = [
   { label: "Plum", value: "0.45 0.12 290" },
   { label: "Warm", value: "0.5 0.08 50" }
 ];
+const backgroundPresets = [
+  { label: "Light", value: "0.96 0.015 75" },
+  { label: "Warm", value: "0.96 0.02 50" },
+  { label: "Cool", value: "0.96 0.015 200" },
+  { label: "Soft", value: "0.94 0.01 75" },
+  { label: "Cream", value: "0.97 0.008 60" }
+];
+const sidebarPresets = [
+  { label: "Light", value: "0.96 0.015 75" },
+  { label: "Muted", value: "0.92 0.02 75" },
+  { label: "Subtle", value: "0.94 0.01 75" },
+  { label: "Warm", value: "0.96 0.02 50" }
+];
+const cardPresets = [
+  { label: "Clean", value: "0.98 0.01 75" },
+  { label: "Soft", value: "0.96 0.015 75" },
+  { label: "Minimal", value: "0.99 0.005 75" },
+  { label: "Warm", value: "0.98 0.01 50" }
+];
 function ColorSwatch({
   value,
   selected,
@@ -25931,6 +25961,47 @@ function ThemeCustomizer() {
                 presets: accentPresets,
                 onPreset: (v2) => setField("accentColor", v2),
                 onColorPick: (v2) => setField("accentColor", v2)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "pt-2 border-t border-border/40", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4", children: "Background Colors" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ColorPickerRow,
+              {
+                label: "Main Background",
+                value: settings.backgroundColor,
+                presets: backgroundPresets,
+                onPreset: (v2) => setField("backgroundColor", v2),
+                onColorPick: (v2) => setField("backgroundColor", v2)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ColorPickerRow,
+              {
+                label: "Sidebar Background",
+                value: settings.sidebarBgColor,
+                presets: sidebarPresets,
+                onPreset: (v2) => setField("sidebarBgColor", v2),
+                onColorPick: (v2) => setField("sidebarBgColor", v2)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ColorPickerRow,
+              {
+                label: "Card Background",
+                value: settings.cardBgColor,
+                presets: cardPresets,
+                onPreset: (v2) => setField("cardBgColor", v2),
+                onColorPick: (v2) => setField("cardBgColor", v2)
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              ColorPickerRow,
+              {
+                label: "Navbar Background",
+                value: settings.navbarBgColor,
+                presets: backgroundPresets,
+                onPreset: (v2) => setField("navbarBgColor", v2),
+                onColorPick: (v2) => setField("navbarBgColor", v2)
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -26318,199 +26389,180 @@ function TableCell({ className, ...props }) {
     }
   );
 }
-const DEFAULT_LOCAL_API_BASE_URL = "http://localhost:7000/jpm";
-const ADMIN_SESSION_STORAGE_KEY = "jpmAdminSession";
-function normalizeText(value) {
-  return (value == null ? void 0 : value.trim()) ?? "";
-}
-function stripTrailingSlash(value) {
-  return value.replace(/\/+$/, "");
-}
-function joinUrl(baseUrl, path) {
-  return `${stripTrailingSlash(baseUrl)}/${path.replace(/^\/+/, "")}`;
-}
-function getDefaultAdminApiBaseUrl() {
-  if (typeof window === "undefined") {
-    return DEFAULT_LOCAL_API_BASE_URL;
+const BASE_URL = "https://api.jpme.in";
+const ENDPOINTS = {
+  // Auth
+  LOGIN: "/admin/auth/login",
+  // Categories
+  ADD_CATEGORY: "/admin/categories",
+  EDIT_CATEGORY: "/admin/categories/:id",
+  GET_CATEGORIES: "/admin/categories/get-category"
+};
+class APIClient {
+  constructor(baseURL = BASE_URL) {
+    this.baseURL = baseURL;
+    this.timeout = 3e4;
+    this.token = null;
   }
-  const isLocalDev = ["localhost", "127.0.0.1"].includes(
-    window.location.hostname
-  );
-  if (isLocalDev) {
-    return DEFAULT_LOCAL_API_BASE_URL;
+  /**
+   * Set authorization token
+   */
+  setToken(token) {
+    this.token = token;
   }
-  return "/jpm";
-}
-function resolveAdminApiBaseUrl(value) {
-  const envBaseUrl = normalizeText(
-    void 0
-  );
-  return stripTrailingSlash(
-    normalizeText(value) || envBaseUrl || getDefaultAdminApiBaseUrl()
-  );
-}
-function createAdminSession(input) {
-  const token = normalizeText(input.token);
-  if (!token) {
-    throw new Error("Admin token is required.");
-  }
-  return {
-    token,
-    baseUrl: resolveAdminApiBaseUrl(input.baseUrl),
-    displayName: normalizeText(input.displayName) || "Admin"
-  };
-}
-function loadStoredAdminSession() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const stored = localStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
-    if (!stored) {
-      return null;
+  /**
+   * Get authorization headers
+   */
+  getHeaders(customHeaders = {}) {
+    const headers = {
+      "Content-Type": "application/json",
+      ...customHeaders
+    };
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
     }
-    const parsed = JSON.parse(stored);
-    if (!normalizeText(parsed.token)) {
-      return null;
+    return headers;
+  }
+  /**
+   * Prepare URL with base URL
+   */
+  prepareUrl(endpoint) {
+    if (endpoint.startsWith("http")) {
+      return endpoint;
     }
-    return createAdminSession({
-      token: parsed.token ?? "",
-      baseUrl: parsed.baseUrl,
-      displayName: parsed.displayName
+    return `${this.baseURL}${endpoint}`;
+  }
+  /**
+   * Handle API response
+   */
+  async handleResponse(response) {
+    const contentType = response.headers.get("content-type");
+    let data;
+    if (contentType == null ? void 0 : contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    if (!response.ok) {
+      const error = new Error((data == null ? void 0 : data.message) || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+  /**
+   * GET request
+   */
+  async get(endpoint, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: this.getHeaders(options.headers),
+      timeout: options.timeout || this.timeout,
+      ...options
     });
-  } catch {
-    return null;
+    return this.handleResponse(response);
   }
-}
-function saveAdminSession(session) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
-}
-function clearAdminSession() {
-  if (typeof window === "undefined") {
-    return;
-  }
-  localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
-}
-function resolveRequestSession(sessionOverride) {
-  const storedSession = loadStoredAdminSession();
-  const token = normalizeText(sessionOverride == null ? void 0 : sessionOverride.token) || normalizeText(storedSession == null ? void 0 : storedSession.token);
-  if (!token) {
-    throw new Error("Please log in to continue.");
-  }
-  return createAdminSession({
-    token,
-    baseUrl: (sessionOverride == null ? void 0 : sessionOverride.baseUrl) ?? (storedSession == null ? void 0 : storedSession.baseUrl),
-    displayName: (sessionOverride == null ? void 0 : sessionOverride.displayName) ?? (storedSession == null ? void 0 : storedSession.displayName)
-  });
-}
-function resolveAdminAssetUrl(assetPath, baseUrl) {
-  const normalizedAssetPath = normalizeText(assetPath);
-  if (!normalizedAssetPath || typeof window === "undefined") {
-    return normalizedAssetPath;
-  }
-  try {
-    const absoluteBaseUrl = new URL(baseUrl, window.location.origin).toString();
-    return new URL(normalizedAssetPath, absoluteBaseUrl).toString();
-  } catch {
-    return normalizedAssetPath;
-  }
-}
-async function requestAdminApi(path, init = {}, options = {}) {
-  const session = resolveRequestSession(options.session);
-  const headers = new Headers(init.headers);
-  headers.set("Accept", "application/json");
-  headers.set("Authorization", `Bearer ${session.token}`);
-  if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-  const response = await fetch(joinUrl(session.baseUrl, path), {
-    ...init,
-    headers
-  });
-  const contentType = response.headers.get("content-type") ?? "";
-  const isJson = contentType.includes("application/json");
-  const responseData = isJson ? await response.json() : await response.text();
-  if (!response.ok) {
-    const message = typeof responseData === "object" && responseData !== null && "message" in responseData && typeof responseData.message === "string" ? responseData.message : response.statusText || "Request failed.";
-    throw new Error(message);
-  }
-  return { data: responseData, session };
-}
-function normalizeCategory(category, baseUrl) {
-  return {
-    ...category,
-    description: category.description ?? "",
-    image: resolveAdminAssetUrl(category.image, baseUrl),
-    imageKey: category.imageKey ?? "",
-    isActive: Boolean(category.isActive)
-  };
-}
-function buildCategoryPayload(input) {
-  const payload = {
-    name: input.name.trim(),
-    slug: input.slug.trim()
-  };
-  if (input.description !== void 0) {
-    payload.description = input.description.trim();
-  }
-  if (input.isActive !== void 0) {
-    payload.isActive = String(input.isActive);
-  }
-  if (input.imageFile) {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(payload)) {
-      formData.set(key, value);
-    }
-    formData.set("image", input.imageFile);
-    return formData;
-  }
-  return JSON.stringify(payload);
-}
-async function listCategories() {
-  const { data, session } = await requestAdminApi("/admin/categories");
-  return data.categories.map(
-    (category) => normalizeCategory(category, session.baseUrl)
-  );
-}
-async function createCategory(input) {
-  const { data, session } = await requestAdminApi(
-    "/admin/categories",
-    {
+  /**
+   * POST request
+   */
+  async post(endpoint, data = {}, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const response = await fetch(url, {
       method: "POST",
-      body: buildCategoryPayload(input)
-    }
-  );
-  return normalizeCategory(data.category, session.baseUrl);
-}
-async function updateCategory(id, input) {
-  const { data, session } = await requestAdminApi(
-    `/admin/categories/${id}`,
-    {
+      headers: this.getHeaders(options.headers),
+      body: JSON.stringify(data),
+      timeout: options.timeout || this.timeout,
+      ...options
+    });
+    return this.handleResponse(response);
+  }
+  /**
+   * PUT request
+   */
+  async put(endpoint, data = {}, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const response = await fetch(url, {
       method: "PUT",
-      body: buildCategoryPayload(input)
-    }
+      headers: this.getHeaders(options.headers),
+      body: JSON.stringify(data),
+      timeout: options.timeout || this.timeout,
+      ...options
+    });
+    return this.handleResponse(response);
+  }
+  /**
+   * PATCH request
+   */
+  async patch(endpoint, data = {}, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const response = await fetch(url, {
+      method: "PATCH",
+      headers: this.getHeaders(options.headers),
+      body: JSON.stringify(data),
+      timeout: options.timeout || this.timeout,
+      ...options
+    });
+    return this.handleResponse(response);
+  }
+  /**
+   * DELETE request
+   */
+  async delete(endpoint, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const response = await fetch(url, {
+      method: "DELETE",
+      headers: this.getHeaders(options.headers),
+      timeout: options.timeout || this.timeout,
+      ...options
+    });
+    return this.handleResponse(response);
+  }
+  /**
+   * Upload file with support for different HTTP methods
+   */
+  async upload(endpoint, formData, options = {}) {
+    const url = this.prepareUrl(endpoint);
+    const headers = { ...this.getHeaders(options.headers) };
+    delete headers["Content-Type"];
+    const response = await fetch(url, {
+      method: options.method || "POST",
+      headers,
+      body: formData,
+      timeout: options.timeout || this.timeout,
+      ...options
+    });
+    return this.handleResponse(response);
+  }
+}
+const apiClient = new APIClient();
+async function getCategories() {
+  const response = await apiClient.get(ENDPOINTS.GET_CATEGORIES);
+  return response.categories || [];
+}
+async function addCategory(formData) {
+  const response = await apiClient.upload(ENDPOINTS.ADD_CATEGORY, formData);
+  return response.category;
+}
+async function editCategory(id, formData) {
+  const response = await apiClient.upload(
+    ENDPOINTS.EDIT_CATEGORY.replace(":id", id),
+    formData,
+    { method: "PUT" }
   );
-  return normalizeCategory(data.category, session.baseUrl);
+  return response.category;
 }
 async function deleteCategory(id) {
-  const { data } = await requestAdminApi(
-    `/admin/categories/${id}`,
-    {
-      method: "DELETE"
-    }
+  const response = await apiClient.delete(
+    ENDPOINTS.EDIT_CATEGORY.replace(":id", id)
   );
-  return data;
-}
-function slugify(text) {
-  return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+  return response;
 }
 function getErrorMessage$1(error) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
-const emptyForm$1 = { name: "", slug: "" };
+const emptyForm$1 = { name: "" };
 const categoriesQueryKey = ["admin", "categories"];
 function CategoriesPage() {
   const queryClient2 = useQueryClient();
@@ -26523,14 +26575,17 @@ function CategoriesPage() {
   const fileInputRef = reactExports.useRef(null);
   const categoriesQuery = useQuery({
     queryKey: categoriesQueryKey,
-    queryFn: listCategories
+    queryFn: getCategories
   });
   const saveCategoryMutation = useMutation({
-    mutationFn: async ({ id, mode, values }) => {
-      if (mode === "update" && id) {
-        return updateCategory(id, values);
+    mutationFn: async ({
+      id,
+      formData
+    }) => {
+      if (id) {
+        return editCategory(id, formData);
       }
-      return createCategory(values);
+      return addCategory(formData);
     },
     onSuccess: async (_, variables) => {
       await queryClient2.invalidateQueries({ queryKey: categoriesQueryKey });
@@ -26541,7 +26596,7 @@ function CategoriesPage() {
       setSelectedImageFile(null);
       clearFileInput();
       ue.success(
-        variables.mode === "update" ? "Category updated" : "Category added"
+        variables.id ? "Category updated" : "Category added"
       );
     },
     onError: (error) => {
@@ -26584,7 +26639,7 @@ function CategoriesPage() {
   }
   function openEdit(category) {
     setEditing(category);
-    setForm({ name: category.name, slug: category.slug });
+    setForm({ name: category.name });
     setPreview(category.image);
     setSelectedImageFile(null);
     clearFileInput();
@@ -26616,30 +26671,23 @@ function CategoriesPage() {
   function handleNameChange(name) {
     setForm((currentForm) => ({
       ...currentForm,
-      name,
-      slug: currentForm.slug === slugify(currentForm.name) ? slugify(name) : currentForm.slug
+      name
     }));
   }
   function handleSave() {
     const name = form.name.trim();
-    const slug = slugify(form.slug || form.name);
     if (!name) {
       ue.error("Category name is required");
       return;
     }
-    if (!slug) {
-      ue.error("Category slug is required");
-      return;
+    const formData = new FormData();
+    formData.append("name", name);
+    if (selectedImageFile) {
+      formData.append("image", selectedImageFile);
     }
     saveCategoryMutation.mutate({
-      id: editing == null ? void 0 : editing.id,
-      mode: editing ? "update" : "create",
-      values: {
-        name,
-        slug,
-        isActive: editing ? void 0 : true,
-        imageFile: selectedImageFile
-      }
+      id: editing == null ? void 0 : editing._id,
+      formData
     });
   }
   function confirmDelete() {
@@ -26660,15 +26708,14 @@ function CategoriesPage() {
         ] })
       }
     ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-card border border-border rounded-xl shadow-subtle overflow-hidden", children: categoriesQuery.isLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableSkeleton, { rows: 5, columns: 4 }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Table, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-card border border-border rounded-xl shadow-subtle overflow-hidden", children: categoriesQuery.isLoading ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableSkeleton, { rows: 5, columns: 3 }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(Table, { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(TableHeader, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(TableRow, { className: "border-border hover:bg-transparent", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "w-16 text-muted-foreground font-medium", children: "Image" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "text-muted-foreground font-medium", children: "Name" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "text-muted-foreground font-medium", children: "Slug" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(TableHead, { className: "w-28 text-right text-muted-foreground font-medium", children: "Actions" })
       ] }) }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(TableBody, { children: [
-        categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 4, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-12 text-center gap-3", children: [
+        categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 3, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center justify-center py-12 text-center gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-muted-foreground", children: getErrorMessage$1(categoriesQuery.error) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Button,
@@ -26680,7 +26727,7 @@ function CategoriesPage() {
             }
           )
         ] }) }) }),
-        !categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 4, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        !categoriesQuery.isError && categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(TableRow, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { colSpan: 3, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "div",
           {
             className: "flex flex-col items-center justify-center py-12 text-muted-foreground gap-3",
@@ -26710,10 +26757,6 @@ function CategoriesPage() {
                 }
               ) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-10 h-10 rounded-md bg-muted border border-border flex items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx(FolderOpen, { className: "w-4 h-4 text-muted-foreground" }) }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-foreground", children: category.name }) }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-muted-foreground font-mono", children: [
-                "/",
-                category.slug
-              ] }) }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(TableCell, { className: "text-right", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-1.5", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx(
                   Button,
@@ -26734,7 +26777,7 @@ function CategoriesPage() {
                     variant: "ghost",
                     size: "icon",
                     className: "h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive",
-                    onClick: () => setDeleteId(category.id),
+                    onClick: () => setDeleteId(category._id),
                     "aria-label": `Delete ${category.name}`,
                     "data-ocid": "delete-category",
                     disabled: isSaving || isDeleting,
@@ -26744,7 +26787,7 @@ function CategoriesPage() {
               ] }) })
             ]
           },
-          category.id
+          category._id
         ))
       ] })
     ] }) }),
@@ -26783,24 +26826,6 @@ function CategoriesPage() {
                 "data-ocid": "category-name-input"
               }
             )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "cat-slug", children: "Slug" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Input,
-              {
-                id: "cat-slug",
-                value: form.slug,
-                onChange: (e3) => setForm((currentForm) => ({
-                  ...currentForm,
-                  slug: e3.target.value
-                })),
-                placeholder: "e.g. seating",
-                className: "mt-1 font-mono text-sm",
-                "data-ocid": "category-slug-input"
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-muted-foreground", children: "Auto-generated from name. You can edit it manually." })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "cat-image", children: "Image" }),
@@ -47932,16 +47957,6 @@ function CardTitle({ className, ...props }) {
     }
   );
 }
-function CardDescription({ className, ...props }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "div",
-    {
-      "data-slot": "card-description",
-      className: cn("text-muted-foreground text-sm", className),
-      ...props
-    }
-  );
-}
 function CardContent({ className, ...props }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
     "div",
@@ -48917,97 +48932,89 @@ function AlertDescription({
     }
   );
 }
-var NAME$2 = "Separator";
-var DEFAULT_ORIENTATION = "horizontal";
-var ORIENTATIONS = ["horizontal", "vertical"];
-var Separator$1 = reactExports.forwardRef((props, forwardedRef) => {
-  const { decorative, orientation: orientationProp = DEFAULT_ORIENTATION, ...domProps } = props;
-  const orientation = isValidOrientation(orientationProp) ? orientationProp : DEFAULT_ORIENTATION;
-  const ariaOrientation = orientation === "vertical" ? orientation : void 0;
-  const semanticProps = decorative ? { role: "none" } : { "aria-orientation": ariaOrientation, role: "separator" };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    Primitive$1.div,
-    {
-      "data-orientation": orientation,
-      ...semanticProps,
-      ...domProps,
-      ref: forwardedRef
-    }
+const DEFAULT_LOCAL_API_BASE_URL = "http://localhost:7000/jpm";
+function getDefaultAdminApiBaseUrl() {
+  if (typeof window === "undefined") {
+    return DEFAULT_LOCAL_API_BASE_URL;
+  }
+  const isLocalDev = ["localhost", "127.0.0.1"].includes(
+    window.location.hostname
   );
-});
-Separator$1.displayName = NAME$2;
-function isValidOrientation(orientation) {
-  return ORIENTATIONS.includes(orientation);
-}
-var Root$1 = Separator$1;
-function Separator({
-  className,
-  orientation = "horizontal",
-  decorative = true,
-  ...props
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    Root$1,
-    {
-      "data-slot": "separator",
-      decorative,
-      orientation,
-      className: cn(
-        "bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
-        className
-      ),
-      ...props
-    }
-  );
-}
-async function verifyAdminSession(session) {
-  await requestAdminApi("/admin/categories", void 0, { session });
-  return session;
+  if (isLocalDev) {
+    return DEFAULT_LOCAL_API_BASE_URL;
+  }
+  return "/jpm";
 }
 async function loginAdmin(input) {
-  const session = createAdminSession(input);
-  await verifyAdminSession(session);
-  saveAdminSession(session);
-  return session;
-}
-function getStoredAdminSession() {
-  return loadStoredAdminSession();
+  try {
+    const response = await apiClient.post(ENDPOINTS.LOGIN, {
+      email: input.email,
+      password: input.password
+    });
+    if (typeof window !== "undefined" && response.token) {
+      localStorage.setItem("adminToken", response.token);
+      localStorage.setItem("adminEmail", response.user.email);
+    }
+    apiClient.setToken(response.token);
+    return response;
+  } catch (error) {
+    apiClient.setToken(null);
+    throw error;
+  }
 }
 function logoutAdmin() {
-  clearAdminSession();
+  apiClient.setToken(null);
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminDisplayName");
+  }
+}
+function getStoredAdminToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return localStorage.getItem("adminToken");
+}
+function initializeAdminSession() {
+  const token = getStoredAdminToken();
+  if (token) {
+    apiClient.setToken(token);
+  }
 }
 const useAdminAuthStore = create((set) => ({
   status: "checking",
-  session: null,
+  user: null,
+  token: null,
   initAuth: async () => {
-    const storedSession = getStoredAdminSession();
-    if (!storedSession) {
-      set({ status: "unauthenticated", session: null });
+    const storedToken = getStoredAdminToken();
+    if (!storedToken) {
+      set({ status: "unauthenticated", user: null, token: null });
       return;
     }
     set({ status: "checking" });
-    try {
-      const verifiedSession = await verifyAdminSession(storedSession);
-      set({ status: "authenticated", session: verifiedSession });
-    } catch {
-      logoutAdmin();
-      set({ status: "unauthenticated", session: null });
-    }
+    initializeAdminSession();
+    set({
+      status: "authenticated",
+      token: storedToken
+    });
   },
   login: async (input) => {
     set({ status: "signing-in" });
     try {
-      const session = await loginAdmin(input);
-      set({ status: "authenticated", session });
-      return session;
+      const response = await loginAdmin(input);
+      set({
+        status: "authenticated",
+        token: input.token,
+        user: response.user
+      });
     } catch (error) {
-      set({ status: "unauthenticated", session: null });
+      set({ status: "unauthenticated", user: null, token: null });
       throw error;
     }
   },
   logout: () => {
     logoutAdmin();
-    set({ status: "unauthenticated", session: null });
+    set({ status: "unauthenticated", user: null, token: null });
   }
 }));
 function getErrorMessage(error) {
@@ -49016,15 +49023,14 @@ function getErrorMessage(error) {
 function LoginPage() {
   const login = useAdminAuthStore((state) => state.login);
   const authStatus = useAdminAuthStore((state) => state.status);
-  const [showToken, setShowToken] = reactExports.useState(false);
+  const [showPassword, setShowPassword] = reactExports.useState(false);
   const [errorMessage, setErrorMessage] = reactExports.useState("");
   const [form, setForm] = reactExports.useState({
-    displayName: "Admin",
-    baseUrl: getDefaultAdminApiBaseUrl(),
-    token: ""
+    email: "",
+    password: ""
   });
   const isSubmitting = authStatus === "signing-in";
-  const helperBaseUrl = reactExports.useMemo(() => getDefaultAdminApiBaseUrl(), []);
+  reactExports.useMemo(() => getDefaultAdminApiBaseUrl(), []);
   async function handleSubmit(event) {
     event.preventDefault();
     setErrorMessage("");
@@ -49038,43 +49044,17 @@ function LoginPage() {
     }
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "min-h-screen bg-[radial-gradient(circle_at_top,_rgba(196,156,84,0.18),_transparent_40%),linear-gradient(180deg,_rgba(250,246,239,0.98),_rgba(245,238,228,0.92))] px-6 py-10", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid w-full gap-8 lg:grid-cols-[1.1fr_0.9fr]", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "hidden rounded-[2rem] border border-border/60 bg-card/70 p-10 shadow-subtle backdrop-blur lg:flex lg:flex-col lg:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ShieldCheck, { className: "h-6 w-6" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium uppercase tracking-[0.24em] text-primary/80", children: "JPM Admin" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "max-w-lg font-display text-4xl font-semibold leading-tight text-foreground", children: "Sign in with your admin token to manage categories and the rest of the panel." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-xl text-base leading-7 text-muted-foreground", children: "Your current backend protects admin routes with a bearer token. This login screen verifies that token against the live API and stores the session locally for this browser." })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Separator, {}),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-border bg-background/70 p-5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-foreground", children: "Token-based auth" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-muted-foreground", children: "Uses the same bearer token your Express middleware expects." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-border bg-background/70 p-5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-foreground", children: "API URL aware" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-sm leading-6 text-muted-foreground", children: [
-              "Works with local development at",
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-mono text-foreground", children: [
-                " ",
-                helperBaseUrl
-              ] }),
-              "."
-            ] })
-          ] })
-        ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx("section", { className: "hidden rounded-[2rem] border border-border/60 bg-card/70 p-10 shadow-subtle backdrop-blur lg:flex lg:flex-col lg:justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ShieldCheck, { className: "h-6 w-6" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium uppercase tracking-[0.24em] text-primary/80", children: "JPM Admin" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "max-w-lg font-display text-4xl font-semibold leading-tight text-foreground", children: "Manage your dashboard with admin credentials." })
       ] })
-    ] }),
+    ] }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { className: "border-border/70 bg-card/90 py-0 shadow-elevated backdrop-blur", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { className: "space-y-3 border-b border-border/70 py-8", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LockKeyhole, { className: "h-5 w-5" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { className: "font-display text-2xl text-foreground", children: "Admin Login" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { className: "leading-6", children: "Enter the admin token configured on your backend. The token is verified by calling the protected admin categories API." })
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { className: "font-display text-2xl text-foreground", children: "Admin Login" }) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(CardContent, { className: "py-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { className: "space-y-5", onSubmit: handleSubmit, children: [
         errorMessage && /* @__PURE__ */ jsxRuntimeExports.jsxs(Alert, { variant: "destructive", children: [
@@ -49083,60 +49063,38 @@ function LoginPage() {
           /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: errorMessage })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-display-name", children: "Display Name" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-email", children: "Email" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             Input,
             {
-              id: "login-display-name",
-              value: form.displayName,
+              id: "login-email",
+              type: "email",
+              value: form.email,
               onChange: (event) => setForm((currentForm) => ({
                 ...currentForm,
-                displayName: event.target.value
+                email: event.target.value
               })),
-              placeholder: "Admin",
-              "data-ocid": "login-display-name-input"
+              placeholder: "admin@example.com",
+              "data-ocid": "login-email-input"
             }
           )
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-base-url", children: "API Base URL" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            Input,
-            {
-              id: "login-base-url",
-              value: form.baseUrl,
-              onChange: (event) => setForm((currentForm) => ({
-                ...currentForm,
-                baseUrl: event.target.value
-              })),
-              placeholder: helperBaseUrl,
-              "data-ocid": "login-base-url-input"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground", children: [
-            "Examples: ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: helperBaseUrl }),
-            " ",
-            "or ",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono", children: "/jpm" })
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-token", children: "Admin Token" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "login-password", children: "Password" }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               Input,
               {
-                id: "login-token",
-                type: showToken ? "text" : "password",
-                value: form.token,
+                id: "login-password",
+                type: showPassword ? "text" : "password",
+                value: form.password,
                 onChange: (event) => setForm((currentForm) => ({
                   ...currentForm,
-                  token: event.target.value
+                  password: event.target.value
                 })),
-                placeholder: "Enter your bearer token",
+                placeholder: "Enter your password",
                 className: "pr-10",
-                "data-ocid": "login-token-input"
+                "data-ocid": "login-password-input"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -49144,10 +49102,10 @@ function LoginPage() {
               {
                 type: "button",
                 className: "absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground",
-                onClick: () => setShowToken((currentValue) => !currentValue),
-                "aria-label": showToken ? "Hide admin token" : "Show admin token",
-                "data-ocid": "toggle-login-token-visibility",
-                children: showToken ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { className: "h-4 w-4" })
+                onClick: () => setShowPassword((currentValue) => !currentValue),
+                "aria-label": showPassword ? "Hide password" : "Show password",
+                "data-ocid": "toggle-login-password-visibility",
+                children: showPassword ? /* @__PURE__ */ jsxRuntimeExports.jsx(EyeOff, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(Eye, { className: "h-4 w-4" })
               }
             )
           ] })
@@ -51187,7 +51145,7 @@ const arrow = (options, deps) => {
     options: [options, deps]
   };
 };
-var NAME$1 = "Arrow";
+var NAME$2 = "Arrow";
 var Arrow$1 = reactExports.forwardRef((props, forwardedRef) => {
   const { children, width = 10, height = 5, ...arrowProps } = props;
   return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -51203,8 +51161,8 @@ var Arrow$1 = reactExports.forwardRef((props, forwardedRef) => {
     }
   );
 });
-Arrow$1.displayName = NAME$1;
-var Root = Arrow$1;
+Arrow$1.displayName = NAME$2;
+var Root$1 = Arrow$1;
 var POPPER_NAME = "Popper";
 var [createPopperContext, createPopperScope] = createContextScope(POPPER_NAME);
 var [PopperProvider, usePopperContext] = createPopperContext(POPPER_NAME);
@@ -51417,7 +51375,7 @@ var PopperArrow = reactExports.forwardRef(function PopperArrow2(props, forwarded
           visibility: contentContext.shouldHideArrow ? "hidden" : void 0
         },
         children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          Root,
+          Root$1,
           {
             ...arrowProps,
             ref: forwardedRef,
@@ -51489,7 +51447,7 @@ var VISUALLY_HIDDEN_STYLES = Object.freeze({
   whiteSpace: "nowrap",
   wordWrap: "normal"
 });
-var NAME = "VisuallyHidden";
+var NAME$1 = "VisuallyHidden";
 var VisuallyHidden = reactExports.forwardRef(
   (props, forwardedRef) => {
     return /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -51502,7 +51460,7 @@ var VisuallyHidden = reactExports.forwardRef(
     );
   }
 );
-VisuallyHidden.displayName = NAME;
+VisuallyHidden.displayName = NAME$1;
 var OPEN_KEYS = [" ", "Enter", "ArrowUp", "ArrowDown"];
 var SELECTION_KEYS = [" ", "Enter"];
 var SELECT_NAME = "Select";
@@ -53397,6 +53355,49 @@ function ReviewsPage() {
       }
     )
   ] });
+}
+var NAME = "Separator";
+var DEFAULT_ORIENTATION = "horizontal";
+var ORIENTATIONS = ["horizontal", "vertical"];
+var Separator$1 = reactExports.forwardRef((props, forwardedRef) => {
+  const { decorative, orientation: orientationProp = DEFAULT_ORIENTATION, ...domProps } = props;
+  const orientation = isValidOrientation(orientationProp) ? orientationProp : DEFAULT_ORIENTATION;
+  const ariaOrientation = orientation === "vertical" ? orientation : void 0;
+  const semanticProps = decorative ? { role: "none" } : { "aria-orientation": ariaOrientation, role: "separator" };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Primitive$1.div,
+    {
+      "data-orientation": orientation,
+      ...semanticProps,
+      ...domProps,
+      ref: forwardedRef
+    }
+  );
+});
+Separator$1.displayName = NAME;
+function isValidOrientation(orientation) {
+  return ORIENTATIONS.includes(orientation);
+}
+var Root = Separator$1;
+function Separator({
+  className,
+  orientation = "horizontal",
+  decorative = true,
+  ...props
+}) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    Root,
+    {
+      "data-slot": "separator",
+      decorative,
+      orientation,
+      className: cn(
+        "bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
+        className
+      ),
+      ...props
+    }
+  );
 }
 const SETTINGS_KEY = "adminSettings";
 function getDefaultSettings() {

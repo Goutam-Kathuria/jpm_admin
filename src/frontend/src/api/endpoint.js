@@ -1,6 +1,6 @@
 // API Base URL
-export const BASE_URL = "http://localhost:7000";
-// export const BASE_URL = "https://api.jpme.in";
+// export const BASE_URL = "http://localhost:7000";
+export const BASE_URL = "https://api.jpme.in";
 
 // API Endpoints
 export const ENDPOINTS = {
