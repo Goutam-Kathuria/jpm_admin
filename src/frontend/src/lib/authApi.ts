@@ -11,6 +11,7 @@ export interface LoginResponse {
   user: {
     id: string;
     email: string;
+    displayName?: string;
   };
   message?: string;
 }
@@ -27,6 +28,10 @@ export async function loginAdmin(input: LoginAdminInput) {
     if (typeof window !== "undefined" && response.token) {
       localStorage.setItem("adminToken", response.token);
       localStorage.setItem("adminEmail", response.user.email);
+      localStorage.setItem(
+        "adminDisplayName",
+        response.user.displayName || response.user.email,
+      );
     }
 
     // Set token for future API calls
@@ -43,6 +48,7 @@ export function logoutAdmin() {
   apiClient.setToken(null);
   if (typeof window !== "undefined") {
     localStorage.removeItem("adminToken");
+    localStorage.removeItem("adminEmail");
     localStorage.removeItem("adminDisplayName");
   }
 }

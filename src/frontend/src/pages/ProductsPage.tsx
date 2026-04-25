@@ -1,3 +1,4 @@
+import { TableSkeleton } from "@/components/ui-custom/LoadingSkeleton";
 import { Modal } from "@/components/ui-custom/Modal";
 import { PageHeader } from "@/components/ui-custom/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -12,57 +13,216 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { type Product, mockCategories, mockProducts } from "@/data/mockData";
-import { Pencil, Plus, Star, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { getCategories } from "@/lib/categoriesApi";
+import {
+  type Product,
+  addProduct,
+  deleteProduct,
+  editProduct,
+  getProductCategoryId,
+  getProductCategoryName,
+  getProducts,
+} from "@/lib/productsApi";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Eye, EyeOff, ImageIcon, Pencil, Plus, Trash2 } from "lucide-react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-const emptyForm: Omit<Product, "id"> = {
+interface ProductFormValues {
+  name: string;
+  categoryId: string;
+  shortDescription: string;
+  description: string;
+  order: string;
+  isActive: boolean;
+}
+
+const emptyForm: ProductFormValues = {
   name: "",
+  categoryId: "",
+  shortDescription: "",
   description: "",
-  price: 0,
-  category: "",
-  image: "",
-  featured: false,
+  order: "0",
+  isActive: true,
 };
 
+const productsQueryKey = ["admin", "products"];
+const categoriesQueryKey = ["admin", "categories"];
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
+function buildProductFormData(
+  form: ProductFormValues,
+  selectedImageFile: File | null,
+) {
+  const formData = new FormData();
+  formData.append("name", form.name.trim());
+  formData.append("categoryId", form.categoryId);
+  formData.append("shortDescription", form.shortDescription.trim());
+  formData.append("description", form.description.trim());
+  formData.append("isActive", String(form.isActive));
+
+  const order = form.order.trim();
+  if (order) {
+    formData.append("order", order);
+  }
+
+  if (selectedImageFile) {
+    formData.append("image", selectedImageFile);
+  }
+
+  return formData;
+}
+
 export function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [form, setForm] = useState<Omit<Product, "id">>(emptyForm);
-  const [preview, setPreview] = useState<string>("");
+  const [form, setForm] = useState<ProductFormValues>(emptyForm);
+  const [preview, setPreview] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function openAdd() {
+  const productsQuery = useQuery({
+    queryKey: productsQueryKey,
+    queryFn: () => getProducts(),
+  });
+
+  const categoriesQuery = useQuery({
+    queryKey: categoriesQueryKey,
+    queryFn: getCategories,
+  });
+
+  const saveProductMutation = useMutation({
+    mutationFn: async ({
+      id,
+      formData,
+    }: {
+      id?: string;
+      formData: FormData;
+    }) => {
+      if (id) {
+        return editProduct(id, formData);
+      }
+
+      return addProduct(formData);
+    },
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: productsQueryKey });
+      setModalOpen(false);
+      resetForm();
+      toast.success(variables.id ? "Product updated" : "Product added");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const toggleProductMutation = useMutation({
+    mutationFn: async (product: Product) => {
+      const formData = new FormData();
+      formData.append("isActive", String(!product.isActive));
+      return editProduct(product._id, formData);
+    },
+    onSuccess: async (_, product) => {
+      await queryClient.invalidateQueries({ queryKey: productsQueryKey });
+      toast.success(product.isActive ? "Product hidden" : "Product activated");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: deleteProduct,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: productsQueryKey });
+      setDeleteId(null);
+      toast.success("Product deleted");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const products = productsQuery.data ?? [];
+  const categories = categoriesQuery.data ?? [];
+  const isSaving = saveProductMutation.isPending;
+  const isDeleting = deleteProductMutation.isPending;
+  const isToggling = toggleProductMutation.isPending;
+
+  useEffect(() => {
+    return () => {
+      if (preview.startsWith("blob:")) {
+        URL.revokeObjectURL(preview);
+      }
+    };
+  }, [preview]);
+
+  function clearFileInput() {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function resetForm() {
     setEditing(null);
     setForm(emptyForm);
     setPreview("");
+    setSelectedImageFile(null);
+    clearFileInput();
+  }
+
+  function openAdd() {
+    resetForm();
     setModalOpen(true);
   }
 
-  function openEdit(p: Product) {
-    setEditing(p);
+  function openEdit(product: Product) {
+    setEditing(product);
     setForm({
-      name: p.name,
-      description: p.description,
-      price: p.price,
-      category: p.category,
-      image: p.image,
-      featured: p.featured,
+      name: product.name,
+      categoryId: getProductCategoryId(product),
+      shortDescription: product.shortDescription ?? "",
+      description: product.description ?? "",
+      order: String(product.order ?? 0),
+      isActive: product.isActive,
     });
-    setPreview(p.image);
+    setPreview(product.image);
+    setSelectedImageFile(null);
+    clearFileInput();
     setModalOpen(true);
   }
 
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPreview(url);
-      setForm((f) => ({ ...f, image: url }));
+  function handleClose() {
+    if (isSaving) {
+      return;
     }
+
+    setModalOpen(false);
+    resetForm();
+  }
+
+  function handleDeleteClose() {
+    if (isDeleting) {
+      return;
+    }
+
+    setDeleteId(null);
+  }
+
+  function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setSelectedImageFile(file);
+    setPreview(URL.createObjectURL(file));
   }
 
   function handleSave() {
@@ -70,45 +230,31 @@ export function ProductsPage() {
       toast.error("Product name is required");
       return;
     }
-    if (!form.price || form.price <= 0) {
-      toast.error("Please enter a valid price");
-      return;
-    }
-    if (!form.category) {
+
+    if (!form.categoryId) {
       toast.error("Please select a category");
       return;
     }
-    if (editing) {
-      setProducts((ps) =>
-        ps.map((p) => (p.id === editing.id ? { ...editing, ...form } : p)),
-      );
-      toast.success("Product updated");
-    } else {
-      setProducts((ps) => [...ps, { id: `prod-${Date.now()}`, ...form }]);
-      toast.success("Product added");
+
+    saveProductMutation.mutate({
+      id: editing?._id,
+      formData: buildProductFormData(form, selectedImageFile),
+    });
+  }
+
+  function confirmDelete() {
+    if (!deleteId) {
+      return;
     }
-    setModalOpen(false);
-  }
 
-  function handleToggleFeatured(p: Product) {
-    const next = !p.featured;
-    setProducts((ps) =>
-      ps.map((prod) => (prod.id === p.id ? { ...prod, featured: next } : prod)),
-    );
-    toast.success(next ? "Marked as featured" : "Removed from featured");
-  }
-
-  function handleDelete(id: string) {
-    setProducts((ps) => ps.filter((p) => p.id !== id));
-    setDeleteId(null);
-    toast.success("Product deleted");
+    deleteProductMutation.mutate(deleteId);
   }
 
   return (
     <div>
       <PageHeader
         title="Products"
-        subtitle="Manage your product catalog"
+        subtitle={`${products.length} catalog products`}
         action={
           <Button onClick={openAdd} data-ocid="add-product">
             <Plus className="w-4 h-4 mr-2" />
@@ -119,160 +265,201 @@ export function ProductsPage() {
 
       <div className="bg-card border border-border rounded-xl shadow-subtle overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" data-ocid="products-table">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground">
-                  Product
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
-                  Category
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">
-                  Price
-                </th>
-                <th className="text-center px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">
-                  Featured
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr
-                  key={p.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                  data-ocid="product-row"
-                >
-                  {/* Image + Name */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={p.image || "/assets/images/placeholder.svg"}
-                        alt={p.name}
-                        className="w-10 h-10 rounded-lg object-cover border border-border shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-medium text-foreground truncate">
-                          {p.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {p.description}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-
-                  {/* Category */}
-                  <td className="px-4 py-3 hidden md:table-cell">
-                    <Badge variant="secondary" className="text-xs">
-                      {p.category}
-                    </Badge>
-                  </td>
-
-                  {/* Price */}
-                  <td className="px-4 py-3 text-right font-medium tabular-nums text-foreground">
-                    ${p.price.toLocaleString()}
-                  </td>
-
-                  {/* Featured badge */}
-                  <td className="px-4 py-3 text-center hidden sm:table-cell">
-                    {p.featured ? (
-                      <Badge
-                        className="text-xs bg-primary/15 text-primary border-primary/30 font-medium"
-                        variant="outline"
-                      >
-                        Featured
-                      </Badge>
-                    ) : (
-                      <Badge
-                        className="text-xs bg-muted text-muted-foreground border-border font-medium"
-                        variant="outline"
-                      >
-                        Standard
-                      </Badge>
-                    )}
-                  </td>
-
-                  {/* Actions */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      {/* Featured toggle */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className={`w-8 h-8 transition-colors ${
-                          p.featured
-                            ? "text-primary hover:text-primary/70"
-                            : "text-muted-foreground hover:text-primary"
-                        }`}
-                        onClick={() => handleToggleFeatured(p)}
-                        aria-label={
-                          p.featured
-                            ? "Remove from featured"
-                            : "Mark as featured"
-                        }
-                        data-ocid="toggle-featured"
-                      >
-                        <Star
-                          className="w-4 h-4"
-                          fill={p.featured ? "currentColor" : "none"}
-                        />
-                      </Button>
-
-                      {/* Edit */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-8 h-8 text-muted-foreground hover:text-foreground"
-                        onClick={() => openEdit(p)}
-                        aria-label="Edit product"
-                        data-ocid="edit-product"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-
-                      {/* Delete */}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-8 h-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteId(p.id)}
-                        aria-label="Delete product"
-                        data-ocid="delete-product"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
+          {productsQuery.isLoading ? (
+            <div className="p-6">
+              <TableSkeleton rows={6} columns={5} />
+            </div>
+          ) : (
+            <table className="w-full text-sm" data-ocid="products-table">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">
+                    Product
+                  </th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">
+                    Category
+                  </th>
+                  <th className="text-right px-4 py-3 font-medium text-muted-foreground">
+                    Order
+                  </th>
+                  <th className="text-center px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">
+                    Status
+                  </th>
+                  <th className="text-right px-4 py-3 font-medium text-muted-foreground">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {productsQuery.isError && products.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+                        <p className="text-sm text-muted-foreground">
+                          {getErrorMessage(productsQuery.error)}
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => productsQuery.refetch()}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
+                {!productsQuery.isError && products.length === 0 && (
+                  <tr>
+                    <td colSpan={5}>
+                      <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
+                        <ImageIcon className="w-10 h-10 opacity-30" />
+                        <p className="text-sm">
+                          No products yet. Add one to get started.
+                        </p>
+                        <Button variant="outline" size="sm" onClick={openAdd}>
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />
+                          Add Product
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
+                {products.map((product) => (
+                  <tr
+                    key={product._id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
+                    data-ocid="product-row"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={
+                            product.image || "/assets/images/placeholder.svg"
+                          }
+                          alt={product.name}
+                          className="w-10 h-10 rounded-lg object-cover border border-border shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground truncate">
+                            {product.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {product.shortDescription ||
+                              product.description ||
+                              "No description"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <Badge variant="secondary" className="text-xs">
+                        {getProductCategoryName(product)}
+                      </Badge>
+                    </td>
+
+                    <td className="px-4 py-3 text-right font-medium tabular-nums text-foreground">
+                      {product.order}
+                    </td>
+
+                    <td className="px-4 py-3 text-center hidden sm:table-cell">
+                      <Badge
+                        className={
+                          product.isActive
+                            ? "text-xs bg-primary/15 text-primary border-primary/30 font-medium"
+                            : "text-xs bg-muted text-muted-foreground border-border font-medium"
+                        }
+                        variant="outline"
+                      >
+                        {product.isActive ? "Active" : "Hidden"}
+                      </Badge>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-muted-foreground hover:text-primary"
+                          onClick={() => toggleProductMutation.mutate(product)}
+                          aria-label={
+                            product.isActive
+                              ? "Hide product"
+                              : "Activate product"
+                          }
+                          disabled={isSaving || isDeleting || isToggling}
+                          data-ocid="toggle-product-status"
+                        >
+                          {product.isActive ? (
+                            <Eye className="w-4 h-4" />
+                          ) : (
+                            <EyeOff className="w-4 h-4" />
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEdit(product)}
+                          aria-label="Edit product"
+                          disabled={isSaving || isDeleting}
+                          data-ocid="edit-product"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteId(product._id)}
+                          aria-label="Delete product"
+                          disabled={isSaving || isDeleting || isToggling}
+                          data-ocid="delete-product"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Add / Edit Modal */}
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleClose}
         title={editing ? "Edit Product" : "Add Product"}
         size="lg"
         footer={
           <div className="flex gap-2">
-            <Button onClick={handleSave} data-ocid="save-product">
-              {editing ? "Save Changes" : "Add Product"}
+            <Button
+              onClick={handleSave}
+              disabled={isSaving || categoriesQuery.isLoading}
+              data-ocid="save-product"
+            >
+              {isSaving
+                ? editing
+                  ? "Saving..."
+                  : "Adding..."
+                : editing
+                  ? "Save Changes"
+                  : "Add Product"}
             </Button>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+            <Button variant="ghost" onClick={handleClose} disabled={isSaving}>
               Cancel
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          {/* Name */}
           <div>
             <Label htmlFor="prod-name">
               Name <span className="text-destructive">*</span>
@@ -287,7 +474,52 @@ export function ProductsPage() {
             />
           </div>
 
-          {/* Description */}
+          <div>
+            <Label>
+              Category <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={form.categoryId}
+              onValueChange={(value) =>
+                setForm((f) => ({ ...f, categoryId: value }))
+              }
+            >
+              <SelectTrigger
+                className="mt-1"
+                data-ocid="product-category-select"
+              >
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category._id} value={category._id}>
+                    {category.name}
+                  </SelectItem>
+                ))}
+                {categories.length === 0 && (
+                  <SelectItem value="no-categories" disabled>
+                    No categories available
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="prod-short-desc">Short Description</Label>
+            <Textarea
+              id="prod-short-desc"
+              value={form.shortDescription}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, shortDescription: e.target.value }))
+              }
+              placeholder="Brief product summary..."
+              className="mt-1 resize-none"
+              rows={2}
+              data-ocid="product-short-desc-input"
+            />
+          </div>
+
           <div>
             <Label htmlFor="prod-desc">Description</Label>
             <Textarea
@@ -296,68 +528,51 @@ export function ProductsPage() {
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
-              placeholder="Brief product description..."
+              placeholder="Full product description..."
               className="mt-1 resize-none"
-              rows={3}
+              rows={4}
               data-ocid="product-desc-input"
             />
           </div>
 
-          {/* Price + Category side by side */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="prod-price">
-                Price <span className="text-destructive">*</span>
-              </Label>
-              <div className="relative mt-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none">
-                  $
-                </span>
-                <Input
-                  id="prod-price"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  value={form.price || ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      price: Number.parseFloat(e.target.value) || 0,
-                    }))
-                  }
-                  placeholder="0.00"
-                  className="pl-7"
-                  data-ocid="product-price-input"
-                />
-              </div>
+              <Label htmlFor="prod-order">Sort Order</Label>
+              <Input
+                id="prod-order"
+                type="number"
+                min={0}
+                step={1}
+                value={form.order}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, order: e.target.value }))
+                }
+                placeholder="0"
+                className="mt-1"
+                data-ocid="product-order-input"
+              />
             </div>
 
-            <div>
-              <Label>
-                Category <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={form.category}
-                onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}
+            <div className="flex items-end">
+              <label
+                htmlFor="prod-active"
+                className="flex h-10 items-center gap-3 rounded-md border border-input bg-background px-3 text-sm cursor-pointer"
               >
-                <SelectTrigger
-                  className="mt-1"
-                  data-ocid="product-category-select"
-                >
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockCategories.map((c) => (
-                    <SelectItem key={c.id} value={c.name}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <input
+                  type="checkbox"
+                  id="prod-active"
+                  checked={form.isActive}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, isActive: e.target.checked }))
+                  }
+                  className="w-4 h-4 cursor-pointer"
+                  data-ocid="product-active-toggle"
+                />
+                Active
+              </label>
             </div>
           </div>
 
-          {/* Image upload */}
           <div>
             <Label htmlFor="prod-image">Image</Label>
             <Input
@@ -382,42 +597,29 @@ export function ProductsPage() {
               </div>
             )}
           </div>
-
-          {/* Featured checkbox */}
-          <div className="flex items-center gap-3 pt-1">
-            <input
-              type="checkbox"
-              id="prod-featured"
-              checked={form.featured}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, featured: e.target.checked }))
-              }
-              className="w-4 h-4 cursor-pointer"
-              data-ocid="product-featured-toggle"
-            />
-            <Label htmlFor="prod-featured" className="cursor-pointer">
-              Mark as featured
-            </Label>
-          </div>
         </div>
       </Modal>
 
-      {/* Delete Confirm Modal */}
       <Modal
         open={!!deleteId}
-        onClose={() => setDeleteId(null)}
+        onClose={handleDeleteClose}
         title="Delete Product"
         description="Are you sure you want to delete this product? This action cannot be undone."
         footer={
           <div className="flex gap-2">
             <Button
               variant="destructive"
-              onClick={() => deleteId && handleDelete(deleteId)}
+              onClick={confirmDelete}
+              disabled={isDeleting}
               data-ocid="confirm-delete-product"
             >
-              Delete
+              {isDeleting ? "Deleting..." : "Delete"}
             </Button>
-            <Button variant="ghost" onClick={() => setDeleteId(null)}>
+            <Button
+              variant="ghost"
+              onClick={handleDeleteClose}
+              disabled={isDeleting}
+            >
               Cancel
             </Button>
           </div>

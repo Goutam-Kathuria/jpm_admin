@@ -1,15 +1,8 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { getDefaultAdminApiBaseUrl } from "@/lib/adminApi";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import {
   Eye,
@@ -19,7 +12,7 @@ import {
   LogIn,
   ShieldCheck,
 } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useState } from "react";
 import { toast } from "sonner";
 
 function getErrorMessage(error: unknown) {
@@ -36,7 +29,6 @@ export function LoginPage() {
     password: "",
   });
   const isSubmitting = authStatus === "signing-in";
-  const helperBaseUrl = useMemo(() => getDefaultAdminApiBaseUrl(), []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

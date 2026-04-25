@@ -1,39 +1,87 @@
 import { PageHeader } from "@/components/ui-custom/PageHeader";
 import { Button } from "@/components/ui/button";
-import { type GalleryItem, mockGallery } from "@/data/mockData";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  addGalleryImage,
+  deleteGalleryImage,
+  getGallery,
+} from "@/lib/galleryApi";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
+const galleryQueryKey = ["admin", "gallery"];
+const gallerySkeletonItems = Array.from(
+  { length: 8 },
+  (_, index) => `gallery-skeleton-${index}`,
+);
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
+
 export function GalleryPage() {
-  const [items, setItems] = useState<GalleryItem[]>(mockGallery);
+  const queryClient = useQueryClient();
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function processFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
-    const newItems: GalleryItem[] = Array.from(files)
-      .filter((f) => f.type.startsWith("image/"))
-      .map((file) => ({
-        id: `gal-${Date.now()}-${file.name}`,
-        url: URL.createObjectURL(file),
-        caption: file.name.replace(/\.[^/.]+$/, ""),
-      }));
+  const galleryQuery = useQuery({
+    queryKey: galleryQueryKey,
+    queryFn: getGallery,
+  });
 
-    if (newItems.length === 0) {
+  const uploadGalleryMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      return Promise.all(files.map((file) => addGalleryImage(file)));
+    },
+    onSuccess: async (_, files) => {
+      await queryClient.invalidateQueries({ queryKey: galleryQueryKey });
+      toast.success(
+        files.length === 1
+          ? "Image uploaded"
+          : `${files.length} images uploaded`,
+      );
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const deleteGalleryMutation = useMutation({
+    mutationFn: deleteGalleryImage,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: galleryQueryKey });
+      toast.success("Image removed");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const items = galleryQuery.data ?? [];
+  const isUploading = uploadGalleryMutation.isPending;
+  const isDeleting = deleteGalleryMutation.isPending;
+
+  function processFiles(files: FileList | null) {
+    if (!files || files.length === 0 || isUploading) {
+      return;
+    }
+
+    const imageFiles = Array.from(files).filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) {
       toast.error("No valid images selected");
       return;
     }
 
-    setItems((prev) => [...prev, ...newItems]);
-    for (const _item of newItems) {
-      toast.success("Image added");
-    }
+    uploadGalleryMutation.mutate(imageFiles);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     processFiles(e.target.files);
-    // reset so same file can be re-selected
     e.target.value = "";
   }
 
@@ -53,33 +101,30 @@ export function GalleryPage() {
   }
 
   function handleDelete(id: string) {
-    setItems((prev) => {
-      const item = prev.find((i) => i.id === id);
-      if (item?.url.startsWith("blob:")) {
-        URL.revokeObjectURL(item.url);
-      }
-      return prev.filter((i) => i.id !== id);
-    });
-    toast.success("Image removed");
+    if (isDeleting) {
+      return;
+    }
+
+    deleteGalleryMutation.mutate(id);
   }
 
   return (
     <div>
       <PageHeader
         title="Gallery"
-        subtitle="Manage your image gallery"
+        subtitle={`${items.length} gallery images`}
         action={
           <Button
             onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
             data-ocid="upload-gallery-btn"
           >
             <Upload className="w-4 h-4 mr-2" />
-            Upload Images
+            {isUploading ? "Uploading..." : "Upload Images"}
           </Button>
         }
       />
 
-      {/* Hidden multi-file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -90,7 +135,6 @@ export function GalleryPage() {
         data-ocid="gallery-file-input"
       />
 
-      {/* Upload Zone */}
       <button
         type="button"
         className={[
@@ -105,6 +149,7 @@ export function GalleryPage() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        disabled={isUploading}
         aria-label="Upload images"
         data-ocid="gallery-upload-zone"
       >
@@ -120,43 +165,71 @@ export function GalleryPage() {
         </div>
         <div className="text-center">
           <p className="text-sm font-medium text-foreground">
-            Click to upload images
+            {isUploading ? "Uploading images..." : "Click to upload images"}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            or drag &amp; drop — PNG, JPG, WEBP supported
+            or drag and drop PNG, JPG, WEBP files
           </p>
         </div>
       </button>
 
-      {/* Empty State */}
-      {items.length === 0 && (
-        <div
-          className="flex flex-col items-center justify-center gap-4 py-20 text-center"
-          data-ocid="gallery-empty-state"
-        >
+      {galleryQuery.isLoading && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          {gallerySkeletonItems.map((item) => (
+            <Skeleton key={item} className="aspect-square rounded-xl" />
+          ))}
+        </div>
+      )}
+
+      {galleryQuery.isError && items.length === 0 && (
+        <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
           <div className="w-20 h-20 rounded-full bg-muted/60 flex items-center justify-center">
             <Image className="w-9 h-9 text-muted-foreground" />
           </div>
           <div>
             <p className="font-display text-lg font-semibold text-foreground">
-              No images yet
+              Gallery could not load
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Upload your first image to start building your gallery
+              {getErrorMessage(galleryQuery.error)}
             </p>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            data-ocid="empty-state-upload-btn"
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload your first image
+          <Button variant="outline" onClick={() => galleryQuery.refetch()}>
+            Retry
           </Button>
         </div>
       )}
 
-      {/* Image Grid */}
+      {!galleryQuery.isLoading &&
+        !galleryQuery.isError &&
+        items.length === 0 && (
+          <div
+            className="flex flex-col items-center justify-center gap-4 py-20 text-center"
+            data-ocid="gallery-empty-state"
+          >
+            <div className="w-20 h-20 rounded-full bg-muted/60 flex items-center justify-center">
+              <Image className="w-9 h-9 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="font-display text-lg font-semibold text-foreground">
+                No images yet
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Upload your first image to start building your gallery
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              data-ocid="empty-state-upload-btn"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Upload your first image
+            </Button>
+          </div>
+        )}
+
       {items.length > 0 && (
         <div
           className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
@@ -164,46 +237,37 @@ export function GalleryPage() {
         >
           {items.map((item) => (
             <div
-              key={item.id}
+              key={item._id}
               className="group relative rounded-xl overflow-hidden border border-border shadow-sm"
               data-ocid="gallery-item"
             >
-              {/* Square image */}
               <div className="aspect-square w-full overflow-hidden">
                 <img
-                  src={item.url}
-                  alt={item.caption}
+                  src={item.image}
+                  alt="Gallery"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"
                 />
               </div>
 
-              {/* Hover overlay */}
               <div className="absolute inset-0 bg-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-              {/* Delete button — top-right */}
               <button
                 type="button"
-                onClick={() => handleDelete(item.id)}
+                onClick={() => handleDelete(item._id)}
+                disabled={isDeleting}
                 className={[
                   "absolute top-2 right-2 w-8 h-8 rounded-full",
                   "bg-card/90 text-foreground flex items-center justify-center",
                   "opacity-0 group-hover:opacity-100 transition-all duration-200",
                   "hover:bg-destructive hover:text-destructive-foreground",
-                  "pointer-events-auto z-10 shadow-sm",
+                  "pointer-events-auto z-10 shadow-sm disabled:opacity-60",
                 ].join(" ")}
-                aria-label={`Delete ${item.caption}`}
+                aria-label="Delete gallery image"
                 data-ocid="delete-gallery-item"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
-
-              {/* Caption */}
-              {item.caption && (
-                <p className="text-xs text-muted-foreground truncate px-2 py-1.5 bg-card border-t border-border">
-                  {item.caption}
-                </p>
-              )}
             </div>
           ))}
         </div>

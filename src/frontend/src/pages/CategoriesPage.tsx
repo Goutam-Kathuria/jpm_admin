@@ -1,6 +1,7 @@
 import { TableSkeleton } from "@/components/ui-custom/LoadingSkeleton";
 import { Modal } from "@/components/ui-custom/Modal";
 import { PageHeader } from "@/components/ui-custom/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import {
   type Category,
   addCategory,
@@ -30,10 +32,55 @@ function getErrorMessage(error: unknown) {
 
 interface CategoryFormValues {
   name: string;
+  slug: string;
+  description: string;
+  tags: string;
+  metaTitle: string;
+  metaDescription: string;
+  isActive: boolean;
+  order: string;
 }
 
-const emptyForm: CategoryFormValues = { name: "" };
+const emptyForm: CategoryFormValues = {
+  name: "",
+  slug: "",
+  description: "",
+  tags: "",
+  metaTitle: "",
+  metaDescription: "",
+  isActive: true,
+  order: "0",
+};
 const categoriesQueryKey = ["admin", "categories"];
+
+function buildCategoryFormData(
+  form: CategoryFormValues,
+  selectedImageFile: File | null,
+) {
+  const formData = new FormData();
+  formData.append("name", form.name.trim());
+  formData.append("slug", form.slug.trim());
+  formData.append("description", form.description.trim());
+  formData.append(
+    "tags",
+    JSON.stringify(
+      form.tags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  );
+  formData.append("metaTitle", form.metaTitle.trim());
+  formData.append("metaDescription", form.metaDescription.trim());
+  formData.append("isActive", String(form.isActive));
+  formData.append("order", form.order.trim() || "0");
+
+  if (selectedImageFile) {
+    formData.append("image", selectedImageFile);
+  }
+
+  return formData;
+}
 
 export function CategoriesPage() {
   const queryClient = useQueryClient();
@@ -72,9 +119,7 @@ export function CategoriesPage() {
       setPreview("");
       setSelectedImageFile(null);
       clearFileInput();
-      toast.success(
-        variables.id ? "Category updated" : "Category added",
-      );
+      toast.success(variables.id ? "Category updated" : "Category added");
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
@@ -111,18 +156,31 @@ export function CategoriesPage() {
     }
   }
 
-  function openAdd() {
+  function resetForm() {
     setEditing(null);
     setForm(emptyForm);
     setPreview("");
     setSelectedImageFile(null);
     clearFileInput();
+  }
+
+  function openAdd() {
+    resetForm();
     setModalOpen(true);
   }
 
   function openEdit(category: Category) {
     setEditing(category);
-    setForm({ name: category.name });
+    setForm({
+      name: category.name,
+      slug: category.slug ?? "",
+      description: category.description ?? "",
+      tags: (category.tags ?? []).join(", "),
+      metaTitle: category.metaTitle ?? "",
+      metaDescription: category.metaDescription ?? "",
+      isActive: category.isActive ?? true,
+      order: String(category.order ?? 0),
+    });
     setPreview(category.image);
     setSelectedImageFile(null);
     clearFileInput();
@@ -135,8 +193,7 @@ export function CategoriesPage() {
     }
 
     setModalOpen(false);
-    setSelectedImageFile(null);
-    clearFileInput();
+    resetForm();
   }
 
   function handleDeleteClose() {
@@ -158,13 +215,6 @@ export function CategoriesPage() {
     setPreview(URL.createObjectURL(file));
   }
 
-  function handleNameChange(name: string) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      name,
-    }));
-  }
-
   function handleSave() {
     const name = form.name.trim();
 
@@ -173,15 +223,15 @@ export function CategoriesPage() {
       return;
     }
 
-    const formData = new FormData();
-    formData.append("name", name);
-    if (selectedImageFile) {
-      formData.append("image", selectedImageFile);
-    }
-
     saveCategoryMutation.mutate({
       id: editing?._id,
-      formData,
+      formData: buildCategoryFormData(
+        {
+          ...form,
+          name,
+        },
+        selectedImageFile,
+      ),
     });
   }
 
@@ -209,7 +259,7 @@ export function CategoriesPage() {
       <div className="bg-card border border-border rounded-xl shadow-subtle overflow-hidden">
         {categoriesQuery.isLoading ? (
           <div className="p-6">
-            <TableSkeleton rows={5} columns={3} />
+            <TableSkeleton rows={5} columns={5} />
           </div>
         ) : (
           <Table>
@@ -219,7 +269,13 @@ export function CategoriesPage() {
                   Image
                 </TableHead>
                 <TableHead className="text-muted-foreground font-medium">
-                  Name
+                  Category
+                </TableHead>
+                <TableHead className="w-28 text-muted-foreground font-medium">
+                  Status
+                </TableHead>
+                <TableHead className="w-24 text-right text-muted-foreground font-medium">
+                  Order
                 </TableHead>
                 <TableHead className="w-28 text-right text-muted-foreground font-medium">
                   Actions
@@ -229,7 +285,7 @@ export function CategoriesPage() {
             <TableBody>
               {categoriesQuery.isError && categories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3}>
+                  <TableCell colSpan={5}>
                     <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
                       <p className="text-sm text-muted-foreground">
                         {getErrorMessage(categoriesQuery.error)}
@@ -248,7 +304,7 @@ export function CategoriesPage() {
 
               {!categoriesQuery.isError && categories.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3}>
+                  <TableCell colSpan={5}>
                     <div
                       className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3"
                       data-ocid="categories-empty-state"
@@ -287,9 +343,36 @@ export function CategoriesPage() {
                   </TableCell>
 
                   <TableCell>
-                    <span className="font-medium text-foreground">
-                      {category.name}
-                    </span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground">
+                        {category.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {category.slug || "Slug will be generated automatically"}
+                      </p>
+                      {category.description && (
+                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                          {category.description}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={
+                        category.isActive
+                          ? "border-primary/30 bg-primary/15 text-primary"
+                          : "border-border bg-muted text-muted-foreground"
+                      }
+                    >
+                      {category.isActive ? "Active" : "Hidden"}
+                    </Badge>
+                  </TableCell>
+
+                  <TableCell className="text-right font-medium text-foreground tabular-nums">
+                    {category.order ?? 0}
                   </TableCell>
 
                   <TableCell className="text-right">
@@ -329,6 +412,7 @@ export function CategoriesPage() {
         open={modalOpen}
         onClose={handleClose}
         title={editing ? "Edit Category" : "Add Category"}
+        size="lg"
         footer={
           <div className="flex gap-2">
             <Button
@@ -350,7 +434,7 @@ export function CategoriesPage() {
           </div>
         }
       >
-        <div className="space-y-4">
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto pr-1">
           <div>
             <Label htmlFor="cat-name">
               Name <span className="text-destructive">*</span>
@@ -358,11 +442,147 @@ export function CategoriesPage() {
             <Input
               id="cat-name"
               value={form.name}
-              onChange={(e) => handleNameChange(e.target.value)}
+              onChange={(e) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  name: e.target.value,
+                }))
+              }
               placeholder="e.g. Seating"
               className="mt-1"
               data-ocid="category-name-input"
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="cat-slug">Slug</Label>
+              <Input
+                id="cat-slug"
+                value={form.slug}
+                onChange={(e) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    slug: e.target.value,
+                  }))
+                }
+                placeholder="optional-custom-slug"
+                className="mt-1"
+                data-ocid="category-slug-input"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="cat-order">Sort Order</Label>
+              <Input
+                id="cat-order"
+                type="number"
+                min={0}
+                step={1}
+                value={form.order}
+                onChange={(e) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    order: e.target.value,
+                  }))
+                }
+                placeholder="0"
+                className="mt-1"
+                data-ocid="category-order-input"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="cat-description">Description</Label>
+            <Textarea
+              id="cat-description"
+              value={form.description}
+              onChange={(e) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  description: e.target.value,
+                }))
+              }
+              placeholder="Short description for this category..."
+              className="mt-1 resize-none"
+              rows={3}
+              data-ocid="category-description-input"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="cat-tags">Tags</Label>
+            <Input
+              id="cat-tags"
+              value={form.tags}
+              onChange={(e) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  tags: e.target.value,
+                }))
+              }
+              placeholder="luxury, modern, outdoor"
+              className="mt-1"
+              data-ocid="category-tags-input"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="cat-meta-title">Meta Title</Label>
+            <Input
+              id="cat-meta-title"
+              value={form.metaTitle}
+              onChange={(e) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  metaTitle: e.target.value,
+                }))
+              }
+              placeholder="SEO title"
+              className="mt-1"
+              data-ocid="category-meta-title-input"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="cat-meta-description">Meta Description</Label>
+            <Textarea
+              id="cat-meta-description"
+              value={form.metaDescription}
+              onChange={(e) =>
+                setForm((currentForm) => ({
+                  ...currentForm,
+                  metaDescription: e.target.value,
+                }))
+              }
+              placeholder="SEO description"
+              className="mt-1 resize-none"
+              rows={3}
+              data-ocid="category-meta-description-input"
+            />
+          </div>
+
+          <div className="flex items-end">
+            <label
+              htmlFor="cat-active"
+              className="flex h-10 items-center gap-3 rounded-md border border-input bg-background px-3 text-sm cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                id="cat-active"
+                checked={form.isActive}
+                onChange={(e) =>
+                  setForm((currentForm) => ({
+                    ...currentForm,
+                    isActive: e.target.checked,
+                  }))
+                }
+                className="h-4 w-4 cursor-pointer"
+                data-ocid="category-active-toggle"
+              />
+              Active
+            </label>
           </div>
 
           <div>

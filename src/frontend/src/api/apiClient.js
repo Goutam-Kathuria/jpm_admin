@@ -1,5 +1,21 @@
 import { BASE_URL } from "./endpoint.js";
 
+export function resolveApiAssetUrl(assetPath) {
+  if (!assetPath) {
+    return "";
+  }
+
+  if (/^(blob:|data:|https?:\/\/)/i.test(assetPath)) {
+    return assetPath;
+  }
+
+  try {
+    return new URL(assetPath, `${BASE_URL}/`).toString();
+  } catch {
+    return assetPath;
+  }
+}
+
 // API Client with pre-built HTTP methods
 class APIClient {
   constructor(baseURL = BASE_URL) {
@@ -142,9 +158,9 @@ class APIClient {
    */
   async upload(endpoint, formData, options = {}) {
     const url = this.prepareUrl(endpoint);
-    const headers = { ...this.getHeaders(options.headers) };
+    const headers = new Headers(this.getHeaders(options.headers));
     // Remove Content-Type for FormData (browser will set it with boundary)
-    delete headers["Content-Type"];
+    headers.delete("Content-Type");
 
     const response = await fetch(url, {
       method: options.method || "POST",
