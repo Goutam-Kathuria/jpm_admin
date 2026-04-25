@@ -53104,9 +53104,17 @@ async function deleteProduct(id) {
 }
 const emptyForm = {
   name: "",
+  slug: "",
   categoryId: "",
   shortDescription: "",
   description: "",
+  material: "",
+  frame: "",
+  cushions: "",
+  warranty: "",
+  tags: "",
+  metaTitle: "",
+  metaDescription: "",
   order: "0",
   isActive: true
 };
@@ -53122,6 +53130,30 @@ function buildProductFormData(form, selectedImageFile) {
   formData.append("shortDescription", form.shortDescription.trim());
   formData.append("description", form.description.trim());
   formData.append("isActive", String(form.isActive));
+  if (form.slug.trim()) {
+    formData.append("slug", form.slug.trim());
+  }
+  if (form.material.trim()) {
+    formData.append("material", form.material.trim());
+  }
+  if (form.frame.trim()) {
+    formData.append("frame", form.frame.trim());
+  }
+  if (form.cushions.trim()) {
+    formData.append("cushions", form.cushions.trim());
+  }
+  if (form.warranty.trim()) {
+    formData.append("warranty", form.warranty.trim());
+  }
+  if (form.tags.trim()) {
+    formData.append("tags", form.tags.trim());
+  }
+  if (form.metaTitle.trim()) {
+    formData.append("metaTitle", form.metaTitle.trim());
+  }
+  if (form.metaDescription.trim()) {
+    formData.append("metaDescription", form.metaDescription.trim());
+  }
   const order = form.order.trim();
   if (order) {
     formData.append("order", order);
@@ -53225,9 +53257,17 @@ function ProductsPage() {
     setEditing(product);
     setForm({
       name: product.name,
+      slug: product.slug ?? "",
       categoryId: getProductCategoryId(product),
       shortDescription: product.shortDescription ?? "",
       description: product.description ?? "",
+      material: product.material ?? "",
+      frame: product.frame ?? "",
+      cushions: product.cushions ?? "",
+      warranty: product.warranty ?? "",
+      tags: (product.tags ?? []).join(", "),
+      metaTitle: product.metaTitle ?? "",
+      metaDescription: product.metaDescription ?? "",
       order: String(product.order ?? 0),
       isActive: product.isActive
     });
@@ -53415,145 +53455,317 @@ function ProductsPage() {
           ),
           /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "ghost", onClick: handleClose, disabled: isSaving, children: "Cancel" })
         ] }),
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { htmlFor: "prod-name", children: [
-              "Name ",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-destructive", children: "*" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Input,
-              {
-                id: "prod-name",
-                value: form.name,
-                onChange: (e3) => setForm((f2) => ({ ...f2, name: e3.target.value })),
-                placeholder: "e.g. Lyon Sectional Sofa",
-                className: "mt-1",
-                "data-ocid": "product-name-input"
-              }
-            )
+        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 max-h-[70vh] overflow-y-auto", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pb-3 border-b", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-muted-foreground mb-3", children: "Required Information" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { htmlFor: "prod-name", children: [
+                  "Product Name ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-destructive", children: "*" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "prod-name",
+                    value: form.name,
+                    onChange: (e3) => setForm((f2) => ({ ...f2, name: e3.target.value })),
+                    placeholder: "e.g. Lyon Sectional Sofa",
+                    className: "mt-1",
+                    "data-ocid": "product-name-input"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { children: [
+                  "Category ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-destructive", children: "*" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  Select,
+                  {
+                    value: form.categoryId,
+                    onValueChange: (value) => setForm((f2) => ({ ...f2, categoryId: value })),
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        SelectTrigger,
+                        {
+                          className: "mt-1",
+                          "data-ocid": "product-category-select",
+                          children: /* @__PURE__ */ jsxRuntimeExports.jsx(SelectValue, { placeholder: "Select category" })
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectContent, { children: [
+                        categories.map((category) => /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: category._id, children: category.name }, category._id)),
+                        categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "no-categories", disabled: true, children: "No categories available" })
+                      ] })
+                    ]
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-short-desc", children: "Short Description" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Textarea,
+                  {
+                    id: "prod-short-desc",
+                    value: form.shortDescription,
+                    onChange: (e3) => setForm((f2) => ({
+                      ...f2,
+                      shortDescription: e3.target.value
+                    })),
+                    placeholder: "Brief product summary...",
+                    className: "mt-1 resize-none",
+                    rows: 2,
+                    "data-ocid": "product-short-desc-input"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-desc", children: "Description" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Textarea,
+                  {
+                    id: "prod-desc",
+                    value: form.description,
+                    onChange: (e3) => setForm((f2) => ({ ...f2, description: e3.target.value })),
+                    placeholder: "Full product description...",
+                    className: "mt-1 resize-none",
+                    rows: 4,
+                    "data-ocid": "product-desc-input"
+                  }
+                )
+              ] })
+            ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { children: [
-              "Category ",
-              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-destructive", children: "*" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pb-3 border-b", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-muted-foreground mb-3", children: [
+              "Product Details ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-muted-foreground font-normal", children: "(Optional)" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              Select,
-              {
-                value: form.categoryId,
-                onValueChange: (value) => setForm((f2) => ({ ...f2, categoryId: value })),
-                children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-slug", children: "URL Slug" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    SelectTrigger,
+                    Input,
                     {
+                      id: "prod-slug",
+                      value: form.slug,
+                      onChange: (e3) => setForm((f2) => ({ ...f2, slug: e3.target.value })),
+                      placeholder: "lyon-sectional-sofa",
                       className: "mt-1",
-                      "data-ocid": "product-category-select",
-                      children: /* @__PURE__ */ jsxRuntimeExports.jsx(SelectValue, { placeholder: "Select category" })
+                      "data-ocid": "product-slug-input"
                     }
-                  ),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectContent, { children: [
-                    categories.map((category) => /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: category._id, children: category.name }, category._id)),
-                    categories.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(SelectItem, { value: "no-categories", disabled: true, children: "No categories available" })
-                  ] })
-                ]
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-short-desc", children: "Short Description" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Textarea,
-              {
-                id: "prod-short-desc",
-                value: form.shortDescription,
-                onChange: (e3) => setForm((f2) => ({ ...f2, shortDescription: e3.target.value })),
-                placeholder: "Brief product summary...",
-                className: "mt-1 resize-none",
-                rows: 2,
-                "data-ocid": "product-short-desc-input"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-desc", children: "Description" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Textarea,
-              {
-                id: "prod-desc",
-                value: form.description,
-                onChange: (e3) => setForm((f2) => ({ ...f2, description: e3.target.value })),
-                placeholder: "Full product description...",
-                className: "mt-1 resize-none",
-                rows: 4,
-                "data-ocid": "product-desc-input"
-              }
-            )
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-order", children: "Sort Order" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                Input,
-                {
-                  id: "prod-order",
-                  type: "number",
-                  min: 0,
-                  step: 1,
-                  value: form.order,
-                  onChange: (e3) => setForm((f2) => ({ ...f2, order: e3.target.value })),
-                  placeholder: "0",
-                  className: "mt-1",
-                  "data-ocid": "product-order-input"
-                }
-              )
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "label",
-              {
-                htmlFor: "prod-active",
-                className: "flex h-10 items-center gap-3 rounded-md border border-input bg-background px-3 text-sm cursor-pointer",
-                children: [
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-material", children: "Material Type" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "input",
+                    Input,
                     {
-                      type: "checkbox",
-                      id: "prod-active",
-                      checked: form.isActive,
-                      onChange: (e3) => setForm((f2) => ({ ...f2, isActive: e3.target.checked })),
-                      className: "w-4 h-4 cursor-pointer",
-                      "data-ocid": "product-active-toggle"
+                      id: "prod-material",
+                      value: form.material,
+                      onChange: (e3) => setForm((f2) => ({ ...f2, material: e3.target.value })),
+                      placeholder: "e.g. Leather, Fabric",
+                      className: "mt-1",
+                      "data-ocid": "product-material-input"
+                    }
+                  )
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-frame", children: "Frame Type" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Input,
+                    {
+                      id: "prod-frame",
+                      value: form.frame,
+                      onChange: (e3) => setForm((f2) => ({ ...f2, frame: e3.target.value })),
+                      placeholder: "e.g. Hardwood, Metal",
+                      className: "mt-1",
+                      "data-ocid": "product-frame-input"
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { htmlFor: "prod-cushion", children: [
+                    "Cushion Type ",
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-amber-600", children: "optional" })
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Input,
+                    {
+                      id: "prod-cushion",
+                      value: form.cushions,
+                      onChange: (e3) => setForm((f2) => ({ ...f2, cushions: e3.target.value })),
+                      placeholder: "e.g. Memory Foam, Spring",
+                      className: "mt-1",
+                      "data-ocid": "product-cushion-input"
+                    }
+                  )
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { htmlFor: "prod-warranty", children: [
+                  "Warranty Period",
+                  " ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-blue-600 font-normal", children: "(Leave blank if no warranty)" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "prod-warranty",
+                    value: form.warranty,
+                    onChange: (e3) => setForm((f2) => ({ ...f2, warranty: e3.target.value })),
+                    placeholder: "e.g. 2 Years, 5 Years, Covers entire product lifespan",
+                    className: "mt-1",
+                    "data-ocid": "product-warranty-input"
+                  }
+                )
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs(Label$1, { htmlFor: "prod-tags", children: [
+                  "Tags ",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-muted-foreground font-normal", children: "(comma-separated)" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "prod-tags",
+                    value: form.tags,
+                    onChange: (e3) => setForm((f2) => ({ ...f2, tags: e3.target.value })),
+                    placeholder: "e.g. modern, luxury, bestseller",
+                    className: "mt-1",
+                    "data-ocid": "product-tags-input"
+                  }
+                )
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pb-3 border-b", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "text-sm font-semibold text-muted-foreground mb-3", children: [
+              "SEO & Metadata ",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-muted-foreground font-normal", children: "(Optional)" })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-meta-title", children: "Meta Title" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "prod-meta-title",
+                    value: form.metaTitle,
+                    onChange: (e3) => setForm((f2) => ({ ...f2, metaTitle: e3.target.value })),
+                    placeholder: "For search engines",
+                    className: "mt-1",
+                    maxLength: 60,
+                    "data-ocid": "product-meta-title-input"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: [
+                  form.metaTitle.length,
+                  "/60"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-meta-desc", children: "Meta Description" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Textarea,
+                  {
+                    id: "prod-meta-desc",
+                    value: form.metaDescription,
+                    onChange: (e3) => setForm((f2) => ({
+                      ...f2,
+                      metaDescription: e3.target.value
+                    })),
+                    placeholder: "For search engines",
+                    className: "mt-1 resize-none",
+                    rows: 2,
+                    maxLength: 160,
+                    "data-ocid": "product-meta-desc-input"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-muted-foreground mt-1", children: [
+                  form.metaDescription.length,
+                  "/160"
+                ] })
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "pb-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-muted-foreground mb-3", children: "Display Options" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-2 gap-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-order", children: "Sort Order" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    Input,
+                    {
+                      id: "prod-order",
+                      type: "number",
+                      min: 0,
+                      step: 1,
+                      value: form.order,
+                      onChange: (e3) => setForm((f2) => ({ ...f2, order: e3.target.value })),
+                      placeholder: "0",
+                      className: "mt-1",
+                      "data-ocid": "product-order-input"
+                    }
+                  )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-end", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "label",
+                  {
+                    htmlFor: "prod-active",
+                    className: "flex h-10 items-center gap-3 rounded-md border border-input bg-background px-3 text-sm cursor-pointer",
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx(
+                        "input",
+                        {
+                          type: "checkbox",
+                          id: "prod-active",
+                          checked: form.isActive,
+                          onChange: (e3) => setForm((f2) => ({
+                            ...f2,
+                            isActive: e3.target.checked
+                          })),
+                          className: "w-4 h-4 cursor-pointer",
+                          "data-ocid": "product-active-toggle"
+                        }
+                      ),
+                      "Active"
+                    ]
+                  }
+                ) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-image", children: "Image" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  Input,
+                  {
+                    id: "prod-image",
+                    ref: fileInputRef,
+                    type: "file",
+                    accept: "image/*",
+                    onChange: handleImageChange,
+                    className: "mt-1",
+                    "data-ocid": "product-image-input"
+                  }
+                ),
+                preview && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "img",
+                    {
+                      src: preview,
+                      alt: "Preview",
+                      className: "w-[120px] h-[120px] object-cover rounded-lg border border-border shrink-0"
                     }
                   ),
-                  "Active"
-                ]
-              }
-            ) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(Label$1, { htmlFor: "prod-image", children: "Image" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              Input,
-              {
-                id: "prod-image",
-                ref: fileInputRef,
-                type: "file",
-                accept: "image/*",
-                onChange: handleImageChange,
-                className: "mt-1",
-                "data-ocid": "product-image-input"
-              }
-            ),
-            preview && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex items-start gap-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "img",
-                {
-                  src: preview,
-                  alt: "Preview",
-                  className: "w-[120px] h-[120px] object-cover rounded-lg border border-border shrink-0"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground pt-1", children: "Image preview" })
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-muted-foreground pt-1", children: "Image preview" })
+                ] })
+              ] })
             ] })
           ] })
         ] })
