@@ -3,11 +3,8 @@ function stripTrailingSlash(value) {
 }
 
 // API Base URL
-export const BASE_URL = stripTrailingSlash(
-  import.meta.env.VITE_ADMIN_API_BASE_URL ||
-    import.meta.env.VITE_API_BASE_URL ||
-    "https://api.jpme.in",
-);
+// export const BASE_URL = stripTrailingSlash("https://api.jpme.in");
+export const BASE_URL = stripTrailingSlash("http://localhost:7000");
 
 // API Endpoints
 export const ENDPOINTS = {
@@ -43,6 +40,15 @@ export const ENDPOINTS = {
   ADD_SETTING: "/admin/settings",
   EDIT_SETTING: "/admin/settings/:id",
   DELETE_SETTING: "/admin/settings/:id",
+
+  // Website content (CMS sections)
+  GET_WEBSITE_CONTENT: "/admin/website-content/:modelKey",
+  SAVE_WEBSITE_CONTENT: "/admin/website-content/:modelKey",
+
+  // Inquiries & dashboard
+  GET_INQUIRIES: "/admin/inquiries",
+  DELETE_INQUIRY: "/admin/inquiries/:id",
+  DASHBOARD_SUMMARY: "/admin/dashboard/summary",
 };
 
 export default ENDPOINTS;

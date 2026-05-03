@@ -10,6 +10,7 @@ import { LoginPage } from "@/pages/LoginPage";
 import { ProductsPage } from "@/pages/ProductsPage";
 import { ReviewsPage } from "@/pages/ReviewsPage";
 import { SettingsPage } from "@/pages/SettingsPage";
+import { WebsiteContentPage } from "@/pages/WebsiteContentPage";
 import { useAdminAuthStore } from "@/store/adminAuthStore";
 import { useThemeStore } from "@/store/themeStore";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,6 +31,8 @@ function PageContent({ page }: { page: PageId }) {
       return <GalleryPage />;
     case "reviews":
       return <ReviewsPage />;
+    case "website-content":
+      return <WebsiteContentPage />;
     case "settings":
       return <SettingsPage />;
   }

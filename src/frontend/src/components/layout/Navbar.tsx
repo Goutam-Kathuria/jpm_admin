@@ -11,6 +11,7 @@ const pageTitles: Record<PageId, string> = {
   products: "Products",
   gallery: "Gallery",
   reviews: "Reviews",
+  "website-content": "Website Content",
   settings: "Settings",
 };
 

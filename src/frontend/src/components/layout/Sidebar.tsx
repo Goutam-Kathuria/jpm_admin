@@ -6,6 +6,7 @@ import {
   Image,
   LayoutDashboard,
   LayoutGrid,
+  LayoutTemplate,
   MessageSquare,
   Settings,
   ShoppingBag,
@@ -19,6 +20,7 @@ export type PageId =
   | "products"
   | "gallery"
   | "reviews"
+  | "website-content"
   | "settings";
 
 const navItems: { id: PageId; label: string; icon: React.ElementType }[] = [
@@ -28,6 +30,7 @@ const navItems: { id: PageId; label: string; icon: React.ElementType }[] = [
   { id: "products", label: "Products", icon: ShoppingBag },
   { id: "gallery", label: "Gallery", icon: Image },
   { id: "reviews", label: "Reviews", icon: Star },
+  { id: "website-content", label: "Website Content", icon: LayoutTemplate },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
