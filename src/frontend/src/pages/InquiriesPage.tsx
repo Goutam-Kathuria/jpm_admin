@@ -41,8 +41,11 @@ export function InquiriesPage() {
   const inquiriesQuery = useQuery({
     queryKey: inquiriesQueryKey,
     queryFn: () => fetchInquiries(300),
-    staleTime: 30 * 1000,
-    refetchInterval: 45 * 1000,
+    staleTime: 10 * 1000,
+    refetchInterval: 10 * 1000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const removeMutation = useMutation({

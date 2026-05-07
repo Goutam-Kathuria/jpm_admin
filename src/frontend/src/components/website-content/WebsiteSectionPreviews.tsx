@@ -43,7 +43,18 @@ export interface StoryPreviewModel {
 }
 
 function assetUrl(path: string) {
-  return resolveApiAssetUrl(path) || path;
+  if (!path) return "";
+
+  // uploaded preview image
+  if (
+    path.startsWith("blob:") ||
+    path.startsWith("data:") ||
+    path.startsWith("http")
+  ) {
+    return path;
+  }
+
+  return resolveApiAssetUrl(path);
 }
 
 export function HeroSectionLivePreview({ data }: { data: HeroPreviewModel }) {
@@ -53,11 +64,16 @@ export function HeroSectionLivePreview({ data }: { data: HeroPreviewModel }) {
     <div className="rounded-xl border border-border/60 bg-black text-white shadow-inner overflow-hidden">
       <div
         className="relative min-h-[360px] md:min-h-[420px] flex flex-col"
-        style={{
-          backgroundImage: `linear-gradient(100deg,rgba(12,12,10,0.88)_8%,rgba(18,16,14,0.6)_55%,rgba(18,16,14,0.25)_100%), url('${bg}')`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
+style={{
+  backgroundImage: `linear-gradient(
+    100deg,
+    rgba(12,12,10,0.88) 8%,
+    rgba(18,16,14,0.6) 55%,
+    rgba(18,16,14,0.25) 100%
+  ), url(${bg})`,
+  backgroundSize: "cover",
+  backgroundPosition: "center",
+}}
       >
         <div
           className="pointer-events-none absolute inset-0"

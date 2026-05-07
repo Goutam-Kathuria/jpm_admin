@@ -1,3 +1,4 @@
+import { resolveApiAssetUrl } from "@/api/apiClient";
 import {
   HeroSectionLivePreview,
   OurStoryLivePreview,
@@ -6,6 +7,7 @@ import {
 import { PageHeader } from "@/components/ui-custom/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -17,37 +19,115 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  fetchWebsiteContent,
+  getWebsiteContent,
   saveWebsiteContent,
   type WebsiteContentRecord,
 } from "@/lib/websiteContentApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, ExternalLink, LayoutTemplate, Plus, Save, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  BadgeCheck,
+  Eye,
+  ImageIcon,
+  LayoutTemplate,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 type SectionId = "hero" | "why_choose_us" | "our_story";
 
-const SECTIONS: {
-  id: SectionId;
+type HeroHighlight = {
+  title: string;
+  subtitle: string;
+  imageUrl: string;
+};
+
+type WhyChooseItem = {
+  iconKey: string;
+  title: string;
+  description: string;
+};
+
+type StoryStat = {
+  value: string;
   label: string;
-  modelKey: string;
-  saveLabel: string;
-}[] = [
-  { id: "hero", label: "Home Hero", modelKey: "hero", saveLabel: "Save Home Hero" },
+};
+
+type HeroFormState = {
+  eyebrowText: string;
+  headlineLine1: string;
+  headlineAccent: string;
+  subheading: string;
+  caption: string;
+  primaryCtaLabel: string;
+  secondaryCtaLabel: string;
+  backgroundImageUrl: string;
+  highlightsCardTitle: string;
+  highlightsSubtitleDefault: string;
+  deskHeading: string;
+  deskPhone: string;
+  deskEmail: string;
+  highlights: HeroHighlight[];
+};
+
+type WhyFormState = {
+  overline: string;
+  heading: string;
+  description: string;
+  items: WhyChooseItem[];
+};
+
+type StoryFormState = {
+  overline: string;
+  headingLine1: string;
+  headingAccent: string;
+  paragraphs: string[];
+  stats: StoryStat[];
+  imageUrl: string;
+};
+
+type SectionEditorState<Form> = {
+  visible: boolean;
+  form: Form;
+  pendingFiles: Record<string, File>;
+  dirty: boolean;
+};
+
+const SECTIONS = [
+  {
+    id: "hero",
+    label: "Home Hero",
+    modelKey: "hero",
+    saveLabel: "Save Home Hero",
+    description:
+      "Manage the homepage hero copy, background image, CTAs, and the collection highlights card.",
+  },
   {
     id: "why_choose_us",
     label: "Why Choose Us",
     modelKey: "why_choose_us",
     saveLabel: "Save Why Choose Us",
+    description:
+      "Control the trust-building section cards that explain the JPM difference on the homepage.",
   },
-  { id: "our_story", label: "Our Story", modelKey: "our_story", saveLabel: "Save Our Story" },
-];
+  {
+    id: "our_story",
+    label: "Our Story",
+    modelKey: "our_story",
+    saveLabel: "Save Our Story",
+    description:
+      "Edit the brand story, stats, and supporting craftsmanship image shown on the website.",
+  },
+] as const;
 
-const heroDefaults = {
+const heroDefaults: HeroFormState = {
   eyebrowText: "Handcrafted luxury furniture from Hisar",
   headlineLine1: "Crafted for",
   headlineAccent: "beautiful living.",
@@ -70,7 +150,7 @@ const heroDefaults = {
   ],
 };
 
-const whyDefaults = {
+const whyDefaults: WhyFormState = {
   overline: "The JPM Difference",
   heading: "Why Choose JPM Enterprises",
   description:
@@ -109,7 +189,7 @@ const whyDefaults = {
   ],
 };
 
-const storyDefaults = {
+const storyDefaults: StoryFormState = {
   overline: "Our Story",
   headingLine1: "Craftsmanship at the",
   headingAccent: "Heart of Everything",
@@ -134,50 +214,101 @@ const ICON_OPTIONS = [
   { value: "sparkles", label: "Sparkles" },
 ];
 
-function deepMerge<T extends Record<string, unknown>>(base: T, patch: unknown): T {
+function deepMerge<T extends Record<string, unknown>>(
+  base: T,
+  patch: unknown,
+): T {
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     return base;
   }
+
   const out = { ...base } as Record<string, unknown>;
-  for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
-    if (v === undefined) continue;
-    out[k] = v;
+  for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    if (value === undefined) {
+      continue;
+    }
+    out[key] = value;
   }
+
   return out as T;
+}
+
+function deepClone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-function normalizeHeroData(raw: unknown) {
-  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const merged = deepMerge(heroDefaults as unknown as Record<string, unknown>, patch);
-  let highlights = Array.isArray((merged as { highlights?: unknown }).highlights)
-    ? ([...(merged as { highlights: unknown[] }).highlights] as Record<string, unknown>[])
+function normalizeHeroData(raw: unknown): HeroFormState {
+  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const merged = deepMerge(
+    heroDefaults as unknown as Record<string, unknown>,
+    patch,
+  );
+
+  const rawHighlights = Array.isArray(
+    (merged as { highlights?: unknown }).highlights,
+  )
+    ? ([...(merged as { highlights: unknown[] }).highlights] as Record<
+        string,
+        unknown
+      >[])
     : [...heroDefaults.highlights];
 
-  highlights = highlights.slice(0, 8).map((row, index) => {
-    const fallback = heroDefaults.highlights[index] ?? heroDefaults.highlights[0];
+  const highlights = rawHighlights.slice(0, 8).map((row, index) => {
+    const fallback =
+      heroDefaults.highlights[index] ?? heroDefaults.highlights[0];
+
     return {
       title: String(row.title ?? fallback.title),
-      subtitle: String(row.subtitle ?? fallback.subtitle ?? heroDefaults.highlightsSubtitleDefault),
+      subtitle: String(
+        row.subtitle ??
+          fallback.subtitle ??
+          heroDefaults.highlightsSubtitleDefault,
+      ),
       imageUrl: String(row.imageUrl ?? ""),
     };
   });
 
-  return { ...merged, highlights } as typeof heroDefaults;
+  return {
+    ...heroDefaults,
+    ...merged,
+    backgroundImageUrl: String(merged.backgroundImageUrl ?? heroDefaults.backgroundImageUrl),
+    highlightsCardTitle: String(
+      merged.highlightsCardTitle ?? heroDefaults.highlightsCardTitle,
+    ),
+    highlightsSubtitleDefault: String(
+      merged.highlightsSubtitleDefault ?? heroDefaults.highlightsSubtitleDefault,
+    ),
+    deskHeading: String(merged.deskHeading ?? heroDefaults.deskHeading),
+    deskPhone: String(merged.deskPhone ?? ""),
+    deskEmail: String(merged.deskEmail ?? ""),
+    highlights,
+  };
 }
 
-function normalizeWhyData(raw: unknown) {
-  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const merged = deepMerge(whyDefaults as unknown as Record<string, unknown>, patch);
-  let items = Array.isArray((merged as { items?: unknown }).items)
+function normalizeWhyData(raw: unknown): WhyFormState {
+  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const merged = deepMerge(
+    whyDefaults as unknown as Record<string, unknown>,
+    patch,
+  );
+
+  const rawItems = Array.isArray((merged as { items?: unknown }).items)
     ? ([...(merged as { items: unknown[] }).items] as Record<string, unknown>[])
     : [...whyDefaults.items];
 
-  items = items.slice(0, 12).map((row, index) => {
+  const items = rawItems.slice(0, 12).map((row, index) => {
     const fallback = whyDefaults.items[index] ?? whyDefaults.items[0];
+
     return {
       iconKey: String(row.iconKey ?? fallback.iconKey),
       title: String(row.title ?? fallback.title),
@@ -185,24 +316,43 @@ function normalizeWhyData(raw: unknown) {
     };
   });
 
-  return { ...merged, items } as typeof whyDefaults;
+  return {
+    ...whyDefaults,
+    ...merged,
+    overline: String(merged.overline ?? whyDefaults.overline),
+    heading: String(merged.heading ?? whyDefaults.heading),
+    description: String(merged.description ?? whyDefaults.description),
+    items,
+  };
 }
 
-function normalizeStoryData(raw: unknown) {
-  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const merged = deepMerge(storyDefaults as unknown as Record<string, unknown>, patch);
+function normalizeStoryData(raw: unknown): StoryFormState {
+  const patch = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+  const merged = deepMerge(
+    storyDefaults as unknown as Record<string, unknown>,
+    patch,
+  );
 
-  let paragraphs = Array.isArray((merged as { paragraphs?: unknown }).paragraphs)
-    ? (merged as { paragraphs: unknown[] }).paragraphs.map((p) => String(p))
+  const rawParagraphs = Array.isArray(
+    (merged as { paragraphs?: unknown }).paragraphs,
+  )
+    ? (merged as { paragraphs: unknown[] }).paragraphs.map((paragraph) =>
+        String(paragraph),
+      )
     : [...storyDefaults.paragraphs];
 
-  paragraphs = paragraphs.filter((p) => p.trim().length > 0);
+  const paragraphs = rawParagraphs
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
 
-  let stats = Array.isArray((merged as { stats?: unknown }).stats)
+  const rawStats = Array.isArray((merged as { stats?: unknown }).stats)
     ? ([...(merged as { stats: unknown[] }).stats] as Record<string, unknown>[])
     : [...storyDefaults.stats];
 
-  stats = stats.slice(0, 8).map((row, index) => {
+  const stats = rawStats.slice(0, 8).map((row, index) => {
     const fallback = storyDefaults.stats[index] ?? storyDefaults.stats[0];
     return {
       value: String(row.value ?? fallback.value),
@@ -211,118 +361,519 @@ function normalizeStoryData(raw: unknown) {
   });
 
   return {
+    ...storyDefaults,
     ...merged,
-    paragraphs: paragraphs.length ? paragraphs : storyDefaults.paragraphs,
+    overline: String(merged.overline ?? storyDefaults.overline),
+    headingLine1: String(merged.headingLine1 ?? storyDefaults.headingLine1),
+    headingAccent: String(merged.headingAccent ?? storyDefaults.headingAccent),
+    paragraphs: paragraphs.length ? paragraphs : [...storyDefaults.paragraphs],
     stats,
-  } as typeof storyDefaults;
+    imageUrl: String(merged.imageUrl ?? storyDefaults.imageUrl),
+  };
+}
+
+function createSectionState<Form>(
+  form: Form,
+  visible = true,
+): SectionEditorState<Form> {
+  return {
+    visible,
+    form,
+    pendingFiles: {},
+    dirty: false,
+  };
+}
+
+function createHeroEditorState(record: WebsiteContentRecord | null) {
+  return createSectionState(
+    normalizeHeroData(record?.data),
+    record?.visible ?? true,
+  );
+}
+
+function createWhyEditorState(record: WebsiteContentRecord | null) {
+  return createSectionState(
+    normalizeWhyData(record?.data),
+    record?.visible ?? true,
+  );
+}
+
+function createStoryEditorState(record: WebsiteContentRecord | null) {
+  return createSectionState(
+    normalizeStoryData(record?.data),
+    record?.visible ?? true,
+  );
 }
 
 function contentQueryKey(modelKey: string) {
   return ["admin", "website-content", modelKey] as const;
 }
 
+function getSectionById(sectionId: SectionId) {
+  return SECTIONS.find((section) => section.id === sectionId) ?? SECTIONS[0];
+}
+
+function getImageName(value: string) {
+  if (!value) {
+    return "";
+  }
+
+  if (value.startsWith("blob:")) {
+    return "Local preview";
+  }
+
+  if (value.startsWith("data:")) {
+    return "Pasted image";
+  }
+
+  return value.split("/").filter(Boolean).pop() ?? value;
+}
+
+function resolvePreviewImage(value: string) {
+  return value ? resolveApiAssetUrl(value) : "";
+}
+
 export function WebsiteContentPage() {
   const queryClient = useQueryClient();
+  const objectUrlsRef = useRef<Set<string>>(new Set());
+
   const [activeTab, setActiveTab] = useState<SectionId>("hero");
   const [previewOpen, setPreviewOpen] = useState(false);
-
-  const activeSection = useMemo(
-    () => SECTIONS.find((s) => s.id === activeTab) ?? SECTIONS[0],
-    [activeTab],
+  const [heroState, setHeroState] = useState(() =>
+    createSectionState(deepClone(heroDefaults)),
   );
+  const [whyState, setWhyState] = useState(() =>
+    createSectionState(deepClone(whyDefaults)),
+  );
+  const [storyState, setStoryState] = useState(() =>
+    createSectionState(deepClone(storyDefaults)),
+  );
+
+  const activeSection = useMemo(() => getSectionById(activeTab), [activeTab]);
 
   const contentQuery = useQuery({
     queryKey: contentQueryKey(activeSection.modelKey),
-    queryFn: () => fetchWebsiteContent(activeSection.modelKey),
+    queryFn: () => getWebsiteContent(activeSection.modelKey),
   });
 
-  const [visible, setVisible] = useState(true);
-  const [heroForm, setHeroForm] = useState(heroDefaults);
-  const [whyForm, setWhyForm] = useState(whyDefaults);
-  const [storyForm, setStoryForm] = useState(storyDefaults);
+  const revokeObjectUrl = useCallback((value?: string) => {
+    if (!value?.startsWith("blob:")) {
+      return;
+    }
 
-  const applyRecord = useCallback(
-    (record: WebsiteContentRecord | null, section: (typeof SECTIONS)[number]) => {
-      setVisible(record?.visible ?? true);
-      const data = record?.data ?? {};
+    URL.revokeObjectURL(value);
+    objectUrlsRef.current.delete(value);
+  }, []);
 
-      if (section.id === "hero") {
-        setHeroForm(normalizeHeroData(data));
-      } else if (section.id === "why_choose_us") {
-        setWhyForm(normalizeWhyData(data));
-      } else {
-        setStoryForm(normalizeStoryData(data));
-      }
+  const createObjectPreview = useCallback(
+    (file: File, previousValue?: string) => {
+      revokeObjectUrl(previousValue);
+      const objectUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.add(objectUrl);
+      return objectUrl;
     },
-    [],
+    [revokeObjectUrl],
+  );
+
+  const revokeHeroPreviewUrls = useCallback(
+    (form: HeroFormState) => {
+      revokeObjectUrl(form.backgroundImageUrl);
+    },
+    [revokeObjectUrl],
+  );
+
+  const revokeStoryPreviewUrls = useCallback(
+    (form: StoryFormState) => {
+      revokeObjectUrl(form.imageUrl);
+    },
+    [revokeObjectUrl],
   );
 
   useEffect(() => {
-    if (contentQuery.data === undefined && contentQuery.isLoading) {
+    return () => {
+      for (const objectUrl of objectUrlsRef.current) {
+        URL.revokeObjectURL(objectUrl);
+      }
+      objectUrlsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (contentQuery.isLoading || contentQuery.isError) {
       return;
     }
-    applyRecord(contentQuery.data ?? null, activeSection);
-  }, [contentQuery.data, contentQuery.isLoading, activeSection, applyRecord]);
+
+    const record = contentQuery.data ?? null;
+
+    if (activeTab === "hero") {
+      setHeroState((previous) => {
+        if (previous.dirty) {
+          return previous;
+        }
+
+        revokeHeroPreviewUrls(previous.form);
+        return createHeroEditorState(record);
+      });
+      return;
+    }
+
+    if (activeTab === "why_choose_us") {
+      setWhyState((previous) =>
+        previous.dirty ? previous : createWhyEditorState(record),
+      );
+      return;
+    }
+
+    setStoryState((previous) => {
+      if (previous.dirty) {
+        return previous;
+      }
+
+      revokeStoryPreviewUrls(previous.form);
+      return createStoryEditorState(record);
+    });
+  }, [
+    activeTab,
+    contentQuery.data,
+    contentQuery.isError,
+    contentQuery.isLoading,
+    revokeHeroPreviewUrls,
+    revokeStoryPreviewUrls,
+  ]);
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      const section = activeSection;
-      let data: object = {};
-
-      if (section.id === "hero") {
-        const { highlightsSubtitleDefault: _omit, ...heroPayload } = heroForm;
-        data = heroPayload;
-      } else if (section.id === "why_choose_us") {
-        data = { ...whyForm };
-      } else {
-        data = { ...storyForm };
+    mutationFn: async (sectionId: SectionId) => {
+      if (sectionId === "hero") {
+        const { highlightsSubtitleDefault: _omit, ...heroPayload } = heroState.form;
+        return saveWebsiteContent("hero", {
+          visible: heroState.visible,
+          data: deepClone(heroPayload) as Record<string, unknown>,
+          files: heroState.pendingFiles,
+        });
       }
 
-      return saveWebsiteContent(section.modelKey, { visible, data });
+      if (sectionId === "why_choose_us") {
+        return saveWebsiteContent("why_choose_us", {
+          visible: whyState.visible,
+          data: deepClone(whyState.form) as Record<string, unknown>,
+          files: whyState.pendingFiles,
+        });
+      }
+
+      return saveWebsiteContent("our_story", {
+        visible: storyState.visible,
+        data: deepClone(storyState.form) as Record<string, unknown>,
+        files: storyState.pendingFiles,
+      });
     },
-    onSuccess: (saved) => {
-      if (saved) {
-        queryClient.setQueryData(contentQueryKey(activeSection.modelKey), saved);
+    onSuccess: (saved, sectionId) => {
+      const savedRecord = saved ?? null;
+      const section = getSectionById(sectionId);
+
+      if (savedRecord) {
+        queryClient.setQueryData(contentQueryKey(section.modelKey), savedRecord);
       }
-      void queryClient.invalidateQueries({ queryKey: contentQueryKey(activeSection.modelKey) });
-      toast.success("Website content saved.");
+
+      if (sectionId === "hero") {
+        setHeroState((previous) => {
+          revokeHeroPreviewUrls(previous.form);
+          return createHeroEditorState(savedRecord);
+        });
+      } else if (sectionId === "why_choose_us") {
+        setWhyState(createWhyEditorState(savedRecord));
+      } else {
+        setStoryState((previous) => {
+          revokeStoryPreviewUrls(previous.form);
+          return createStoryEditorState(savedRecord);
+        });
+      }
+
+      void queryClient.invalidateQueries({
+        queryKey: contentQueryKey(section.modelKey),
+      });
+
+      toast.success(`${section.label} saved successfully.`);
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
     },
   });
 
+  const activeState = useMemo(() => {
+    if (activeTab === "hero") {
+      return heroState;
+    }
+    if (activeTab === "why_choose_us") {
+      return whyState;
+    }
+    return storyState;
+  }, [activeTab, heroState, storyState, whyState]);
+
+  const sectionSummary = useMemo(() => {
+    if (activeTab === "hero") {
+      return `${heroState.form.highlights.length} highlight rows`;
+    }
+    if (activeTab === "why_choose_us") {
+      return `${whyState.form.items.length} feature cards`;
+    }
+    return `${storyState.form.stats.length} stat blocks`;
+  }, [activeTab, heroState.form.highlights.length, storyState.form.stats.length, whyState.form.items.length]);
+
+  const updateHeroForm = useCallback(
+    (updater: (previous: HeroFormState) => HeroFormState) => {
+      setHeroState((previous) => ({
+        ...previous,
+        dirty: true,
+        form: updater(previous.form),
+      }));
+    },
+    [],
+  );
+
+  const updateWhyForm = useCallback(
+    (updater: (previous: WhyFormState) => WhyFormState) => {
+      setWhyState((previous) => ({
+        ...previous,
+        dirty: true,
+        form: updater(previous.form),
+      }));
+    },
+    [],
+  );
+
+  const updateStoryForm = useCallback(
+    (updater: (previous: StoryFormState) => StoryFormState) => {
+      setStoryState((previous) => ({
+        ...previous,
+        dirty: true,
+        form: updater(previous.form),
+      }));
+    },
+    [],
+  );
+
+  const setSectionVisible = useCallback((sectionId: SectionId, visible: boolean) => {
+    if (sectionId === "hero") {
+      setHeroState((previous) => ({ ...previous, visible, dirty: true }));
+      return;
+    }
+
+    if (sectionId === "why_choose_us") {
+      setWhyState((previous) => ({ ...previous, visible, dirty: true }));
+      return;
+    }
+
+    setStoryState((previous) => ({ ...previous, visible, dirty: true }));
+  }, []);
+
+  const selectHeroBackgroundImage = useCallback(
+    (file: File) => {
+      setHeroState((previous) => ({
+        ...previous,
+        dirty: true,
+        pendingFiles: {
+          ...previous.pendingFiles,
+          backgroundImageUrl: file,
+        },
+        form: {
+          ...previous.form,
+          backgroundImageUrl: createObjectPreview(
+            file,
+            previous.form.backgroundImageUrl,
+          ),
+        },
+      }));
+    },
+    [createObjectPreview],
+  );
+
+  const selectStoryImage = useCallback(
+    (file: File) => {
+      setStoryState((previous) => ({
+        ...previous,
+        dirty: true,
+        pendingFiles: {
+          ...previous.pendingFiles,
+          imageUrl: file,
+        },
+        form: {
+          ...previous.form,
+          imageUrl: createObjectPreview(file, previous.form.imageUrl),
+        },
+      }));
+    },
+    [createObjectPreview],
+  );
+
+  const previewContent = useMemo(() => {
+    if (activeTab === "hero") {
+      return <HeroSectionLivePreview data={heroState.form} />;
+    }
+
+    if (activeTab === "why_choose_us") {
+      return <WhyChooseLivePreview data={whyState.form} />;
+    }
+
+    return <OurStoryLivePreview data={storyState.form} />;
+  }, [activeTab, heroState.form, storyState.form, whyState.form]);
+
+  const isSavingActiveSection =
+    saveMutation.isPending && saveMutation.variables === activeTab;
+
   return (
-    <div className="space-y-6">
+    <div data-ocid="website-content.page" className="space-y-6">
       <PageHeader
         title="Website Content"
-        subtitle="Manage reusable homepage sections. Each tab maps to a model key consumed by the public site API."
+        subtitle="Manage the homepage CMS sections with the same preview-first workflow used in the reference admin."
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>
-              <Eye className="mr-2 h-4 w-4" />
-              Live section preview
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPreviewOpen(true)}
+              className="rounded-xl gap-2 shadow-sm w-full sm:w-auto"
+            >
+              <Eye size={15} />
+              Preview
             </Button>
             <Button
               type="button"
-              variant="ghost"
-              className="text-muted-foreground"
-              onClick={() => window.open("/", "_blank", "noopener,noreferrer")}
+              onClick={() => saveMutation.mutate(activeTab)}
+              disabled={isSavingActiveSection}
+              className="rounded-xl gap-2 shadow-sm w-full sm:w-auto"
             >
-              <ExternalLink className="mr-2 h-4 w-4" />
-              Open site
-            </Button>
-            <Button
-              type="button"
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || contentQuery.isLoading}
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {activeSection.saveLabel}
+              {isSavingActiveSection ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Save size={15} />
+              )}
+              {isSavingActiveSection ? "Saving..." : activeSection.saveLabel}
             </Button>
           </div>
         }
       />
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as SectionId)}
+        className="mb-6"
+      >
+        <TabsList className="inline-flex w-full rounded-3xl bg-slate-100 p-2 gap-2 h-auto">
+          {SECTIONS.map((section) => (
+            <TabsTrigger
+              key={section.id}
+              value={section.id}
+              className="flex-1 rounded-2xl"
+            >
+              {section.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {contentQuery.isError ? (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {getErrorMessage(contentQuery.error)}
+        </div>
+      ) : null}
+
+      <Card className="rounded-3xl border-slate-100 shadow-sm">
+        <CardHeader className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <CardTitle className="flex items-center gap-2 text-[#1E293B]">
+                <LayoutTemplate size={18} />
+                {activeSection.label}
+              </CardTitle>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                {activeSection.description}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="font-mono text-[11px]">
+                modelKey: {activeSection.modelKey}
+              </Badge>
+              <Badge variant={activeState.visible ? "secondary" : "outline"}>
+                {activeState.visible ? "Visible on site" : "Hidden on site"}
+              </Badge>
+              {activeState.dirty ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-200 bg-amber-50 text-amber-800"
+                >
+                  Unsaved changes
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="gap-1">
+                  <BadgeCheck className="h-3 w-3" />
+                  Synced
+                </Badge>
+              )}
+              {contentQuery.isFetching ? (
+                <Badge variant="outline">Refreshing...</Badge>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor={`visible-${activeTab}`} className="text-sm">
+                    Section visibility
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    When disabled, the public API returns 404 for this section
+                    and the website falls back to its built-in copy.
+                  </p>
+                </div>
+                <Switch
+                  id={`visible-${activeTab}`}
+                  checked={activeState.visible}
+                  onCheckedChange={(checked) =>
+                    setSectionVisible(activeTab, checked)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Section payload
+              </p>
+              <p className="mt-2 text-sm text-foreground">{sectionSummary}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Preview uses the live website styling before you publish.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {activeTab === "hero" ? (
+            <HeroEditor
+              form={heroState.form}
+              pendingFiles={heroState.pendingFiles}
+              onChange={updateHeroForm}
+              onSelectBackgroundImage={selectHeroBackgroundImage}
+            />
+          ) : null}
+
+          {activeTab === "why_choose_us" ? (
+            <WhyChooseEditor form={whyState.form} onChange={updateWhyForm} />
+          ) : null}
+
+          {activeTab === "our_story" ? (
+            <StoryEditor
+              form={storyState.form}
+              pendingFiles={storyState.pendingFiles}
+              onChange={updateStoryForm}
+              onSelectImage={selectStoryImage}
+            />
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent
@@ -334,242 +885,214 @@ export function WebsiteContentPage() {
               {activeSection.label} preview
             </DialogTitle>
             <DialogDescription className="flex flex-wrap items-center gap-2">
-              Styled like the live website. Shows current form values — save to publish via the
-              API.
-              {!visible ? (
+              Styled like the live website. This preview uses the current form
+              values, including unsaved image selections.
+              {!activeState.visible ? (
                 <Badge variant="outline" className="text-xs">
-                  Visibility off → hidden on public GET
+                  Visibility off: hidden on public GET
                 </Badge>
               ) : null}
             </DialogDescription>
           </DialogHeader>
+
           <div className="min-h-0 flex-1 overflow-y-auto bg-muted/30 px-4 py-5 sm:px-6">
             <div className="mx-auto max-w-[1100px] space-y-4">
               <Badge variant="secondary" className="font-mono text-[11px]">
                 modelKey: {activeSection.modelKey}
               </Badge>
-              {activeTab === "hero" ? <HeroSectionLivePreview data={heroForm} /> : null}
-              {activeTab === "why_choose_us" ? (
-                <WhyChooseLivePreview data={whyForm} />
-              ) : null}
-              {activeTab === "our_story" ? <OurStoryLivePreview data={storyForm} /> : null}
+              {previewContent}
             </div>
           </div>
         </DialogContent>
       </Dialog>
-
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SectionId)}>
-        <TabsList className="flex flex-wrap h-auto gap-1 p-1">
-          {SECTIONS.map((s) => (
-            <TabsTrigger key={s.id} value={s.id} className="text-sm">
-              {s.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        {SECTIONS.map((section) => (
-          <TabsContent key={section.id} value={section.id} className="mt-6 space-y-6">
-            <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex flex-wrap items-center gap-3 mb-6">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <LayoutTemplate className="h-5 w-5" />
-                </div>
-                <div className="flex-1 min-w-[200px]">
-                  <p className="font-display text-lg font-semibold text-foreground">
-                    {section.label} section
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      modelKey: {section.modelKey}
-                    </Badge>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-border/60 bg-muted/30 px-4 py-3">
-                <div className="space-y-0.5">
-                  <Label htmlFor={`visible-${section.id}`} className="text-base">
-                    Section visibility
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    When off, the public API returns 404 for this key and the site keeps its static
-                    fallback.
-                  </p>
-                </div>
-                <Switch
-                  id={`visible-${section.id}`}
-                  checked={visible}
-                  onCheckedChange={setVisible}
-                />
-              </div>
-
-              <Separator className="my-6" />
-
-              {section.id === "hero" ? (
-                <HeroFields form={heroForm} onChange={setHeroForm} />
-              ) : null}
-              {section.id === "why_choose_us" ? (
-                <WhyFields form={whyForm} onChange={setWhyForm} />
-              ) : null}
-              {section.id === "our_story" ? (
-                <StoryFields form={storyForm} onChange={setStoryForm} />
-              ) : null}
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
     </div>
   );
 }
 
-function HeroFields({
+function HeroEditor({
   form,
+  pendingFiles,
   onChange,
+  onSelectBackgroundImage,
 }: {
-  form: typeof heroDefaults;
-  onChange: (next: typeof heroDefaults) => void;
+  form: HeroFormState;
+  pendingFiles: Record<string, File>;
+  onChange: (updater: (previous: HeroFormState) => HeroFormState) => void;
+  onSelectBackgroundImage: (file: File) => void;
 }) {
-  const update = (patch: Partial<typeof heroDefaults>) => {
-    onChange({ ...form, ...patch });
+  const update = (patch: Partial<HeroFormState>) => {
+    onChange((previous) => ({ ...previous, ...patch }));
   };
 
-  const updateHighlight = (
-    index: number,
-    patch: Partial<(typeof heroDefaults.highlights)[0]>,
-  ) => {
-    const highlights = form.highlights.map((row, i) =>
-      i === index ? { ...row, ...patch } : row,
-    );
-    update({ highlights });
+  const updateHighlight = (index: number, patch: Partial<HeroHighlight>) => {
+    onChange((previous) => ({
+      ...previous,
+      highlights: previous.highlights.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    }));
   };
 
   const addHighlight = () => {
-    update({
+    onChange((previous) => ({
+      ...previous,
       highlights: [
-        ...form.highlights,
-        { title: "", subtitle: form.highlightsSubtitleDefault, imageUrl: "" },
+        ...previous.highlights,
+        {
+          title: "",
+          subtitle: previous.highlightsSubtitleDefault,
+          imageUrl: "",
+        },
       ],
-    });
+    }));
   };
 
   const removeHighlight = (index: number) => {
-    update({ highlights: form.highlights.filter((_, i) => i !== index) });
+    onChange((previous) => ({
+      ...previous,
+      highlights: previous.highlights.filter((_, rowIndex) => rowIndex !== index),
+    }));
   };
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Eyebrow text">
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+        <Field label="Eyebrow Text">
           <Input
             value={form.eyebrowText}
-            onChange={(e) => update({ eyebrowText: e.target.value })}
+            onChange={(event) => update({ eyebrowText: event.target.value })}
           />
         </Field>
-        <Field label="Background image URL">
-          <Input
-            value={form.backgroundImageUrl}
-            onChange={(e) => update({ backgroundImageUrl: e.target.value })}
-            placeholder="/assets/... or https://"
-          />
-        </Field>
+
+        <ImageUploadField
+          id="hero-background-image"
+          label="Background Image"
+          hint="Used behind the homepage hero copy."
+          value={form.backgroundImageUrl}
+          pending={Boolean(pendingFiles.backgroundImageUrl)}
+          onPick={onSelectBackgroundImage}
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Headline (first line)">
           <Input
             value={form.headlineLine1}
-            onChange={(e) => update({ headlineLine1: e.target.value })}
+            onChange={(event) => update({ headlineLine1: event.target.value })}
           />
         </Field>
-        <Field label="Headline accent (styled line)">
+        <Field label="Headline Accent">
           <Input
             value={form.headlineAccent}
-            onChange={(e) => update({ headlineAccent: e.target.value })}
+            onChange={(event) => update({ headlineAccent: event.target.value })}
           />
         </Field>
       </div>
 
       <Field label="Subheading">
         <Textarea
-          rows={3}
+          rows={4}
           value={form.subheading}
-          onChange={(e) => update({ subheading: e.target.value })}
+          onChange={(event) => update({ subheading: event.target.value })}
         />
       </Field>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Primary CTA label">
+        <Field label="Primary CTA Label">
           <Input
             value={form.primaryCtaLabel}
-            onChange={(e) => update({ primaryCtaLabel: e.target.value })}
+            onChange={(event) =>
+              update({ primaryCtaLabel: event.target.value })
+            }
           />
         </Field>
-        <Field label="Secondary CTA label">
+        <Field label="Secondary CTA Label">
           <Input
             value={form.secondaryCtaLabel}
-            onChange={(e) => update({ secondaryCtaLabel: e.target.value })}
+            onChange={(event) =>
+              update({ secondaryCtaLabel: event.target.value })
+            }
           />
         </Field>
       </div>
 
-      <Field label="Bottom caption">
+      <Field label="Bottom Caption">
         <Textarea
-          rows={2}
+          rows={3}
           value={form.caption}
-          onChange={(e) => update({ caption: e.target.value })}
+          onChange={(event) => update({ caption: event.target.value })}
         />
       </Field>
 
       <Separator />
 
-      <Field label="Highlights card title">
+      <Field label="Highlights Card Title">
         <Input
           value={form.highlightsCardTitle}
-          onChange={(e) => update({ highlightsCardTitle: e.target.value })}
+          onChange={(event) =>
+            update({ highlightsCardTitle: event.target.value })
+          }
         />
       </Field>
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4">
-          <Label>Highlight rows</Label>
-          <Button type="button" size="sm" variant="outline" onClick={addHighlight}>
+          <Label>Highlight Rows</Label>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-xl"
+            onClick={addHighlight}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add row
           </Button>
         </div>
+
         {form.highlights.map((row, index) => (
           <div
-            key={`h-${index}`}
-            className="grid gap-3 rounded-lg border border-border/70 p-4 md:grid-cols-[1fr_1fr_1fr_auto]"
+            key={`hero-highlight-${index}`}
+            className="grid gap-4 rounded-2xl border border-slate-200 p-4 lg:grid-cols-[1fr_1fr_1.3fr_auto]"
           >
             <Field label="Title">
               <Input
                 value={row.title}
-                onChange={(e) => updateHighlight(index, { title: e.target.value })}
+                onChange={(event) =>
+                  updateHighlight(index, { title: event.target.value })
+                }
               />
             </Field>
+
             <Field label="Subtitle">
               <Input
                 value={row.subtitle}
-                onChange={(e) => updateHighlight(index, { subtitle: e.target.value })}
+                onChange={(event) =>
+                  updateHighlight(index, { subtitle: event.target.value })
+                }
               />
             </Field>
+
             <Field label="Image URL (optional)">
               <Input
                 value={row.imageUrl}
-                onChange={(e) => updateHighlight(index, { imageUrl: e.target.value })}
+                onChange={(event) =>
+                  updateHighlight(index, { imageUrl: event.target.value })
+                }
+                placeholder="/assets/uploads/..."
               />
             </Field>
+
             <div className="flex items-end">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="shrink-0"
+                className="h-10 w-10 shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={() => removeHighlight(index)}
                 aria-label="Remove highlight row"
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -578,26 +1101,26 @@ function HeroFields({
 
       <Separator />
 
-      <Field label="Design desk heading">
+      <Field label="Design Desk Heading">
         <Input
           value={form.deskHeading}
-          onChange={(e) => update({ deskHeading: e.target.value })}
+          onChange={(event) => update({ deskHeading: event.target.value })}
         />
       </Field>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Desk phone override (optional)">
+        <Field label="Desk Phone Override">
           <Input
             value={form.deskPhone}
-            onChange={(e) => update({ deskPhone: e.target.value })}
+            onChange={(event) => update({ deskPhone: event.target.value })}
             placeholder="Uses site settings when empty"
           />
         </Field>
-        <Field label="Desk email override (optional)">
+        <Field label="Desk Email Override">
           <Input
-            type="email"
             value={form.deskEmail}
-            onChange={(e) => update({ deskEmail: e.target.value })}
+            type="email"
+            onChange={(event) => update({ deskEmail: event.target.value })}
             placeholder="Uses site settings when empty"
           />
         </Field>
@@ -606,49 +1129,64 @@ function HeroFields({
   );
 }
 
-function WhyFields({
+function WhyChooseEditor({
   form,
   onChange,
 }: {
-  form: typeof whyDefaults;
-  onChange: (next: typeof whyDefaults) => void;
+  form: WhyFormState;
+  onChange: (updater: (previous: WhyFormState) => WhyFormState) => void;
 }) {
-  const update = (patch: Partial<typeof whyDefaults>) => onChange({ ...form, ...patch });
+  const update = (patch: Partial<WhyFormState>) => {
+    onChange((previous) => ({ ...previous, ...patch }));
+  };
 
-  const updateItem = (
-    index: number,
-    patch: Partial<(typeof whyDefaults.items)[0]>,
-  ) => {
-    const items = form.items.map((row, i) => (i === index ? { ...row, ...patch } : row));
-    update({ items });
+  const updateItem = (index: number, patch: Partial<WhyChooseItem>) => {
+    onChange((previous) => ({
+      ...previous,
+      items: previous.items.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    }));
   };
 
   const addItem = () => {
-    update({
+    onChange((previous) => ({
+      ...previous,
       items: [
-        ...form.items,
+        ...previous.items,
         { iconKey: "gem", title: "", description: "" },
       ],
-    });
+    }));
   };
 
   const removeItem = (index: number) => {
-    update({ items: form.items.filter((_, i) => i !== index) });
+    onChange((previous) => ({
+      ...previous,
+      items: previous.items.filter((_, rowIndex) => rowIndex !== index),
+    }));
   };
 
   return (
     <div className="space-y-6">
       <Field label="Overline">
-        <Input value={form.overline} onChange={(e) => update({ overline: e.target.value })} />
+        <Input
+          value={form.overline}
+          onChange={(event) => update({ overline: event.target.value })}
+        />
       </Field>
+
       <Field label="Heading">
-        <Input value={form.heading} onChange={(e) => update({ heading: e.target.value })} />
+        <Input
+          value={form.heading}
+          onChange={(event) => update({ heading: event.target.value })}
+        />
       </Field>
+
       <Field label="Description">
         <Textarea
-          rows={3}
+          rows={4}
           value={form.description}
-          onChange={(e) => update({ description: e.target.value })}
+          onChange={(event) => update({ description: event.target.value })}
         />
       </Field>
 
@@ -656,49 +1194,69 @@ function WhyFields({
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4">
-          <Label>Feature cards</Label>
-          <Button type="button" size="sm" variant="outline" onClick={addItem}>
+          <Label>Feature Cards</Label>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-xl"
+            onClick={addItem}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add card
           </Button>
         </div>
+
         {form.items.map((row, index) => (
           <div
-            key={`f-${index}`}
-            className="grid gap-3 rounded-lg border border-border/70 p-4 md:grid-cols-[160px_1fr_2fr_auto]"
+            key={`why-card-${index}`}
+            className="grid gap-4 rounded-2xl border border-slate-200 p-4 lg:grid-cols-[180px_1fr_1.8fr_auto]"
           >
             <Field label="Icon">
               <select
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={row.iconKey}
-                onChange={(e) => updateItem(index, { iconKey: e.target.value })}
+                onChange={(event) =>
+                  updateItem(index, { iconKey: event.target.value })
+                }
               >
-                {ICON_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                {ICON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
             </Field>
+
             <Field label="Title">
-              <Input value={row.title} onChange={(e) => updateItem(index, { title: e.target.value })} />
+              <Input
+                value={row.title}
+                onChange={(event) =>
+                  updateItem(index, { title: event.target.value })
+                }
+              />
             </Field>
+
             <Field label="Description">
               <Textarea
                 rows={2}
                 value={row.description}
-                onChange={(e) => updateItem(index, { description: e.target.value })}
+                onChange={(event) =>
+                  updateItem(index, { description: event.target.value })
+                }
               />
             </Field>
+
             <div className="flex items-end">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                className="h-10 w-10 shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={() => removeItem(index)}
-                aria-label="Remove card"
+                aria-label="Remove feature card"
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -708,69 +1266,98 @@ function WhyFields({
   );
 }
 
-function StoryFields({
+function StoryEditor({
   form,
+  pendingFiles,
   onChange,
+  onSelectImage,
 }: {
-  form: typeof storyDefaults;
-  onChange: (next: typeof storyDefaults) => void;
+  form: StoryFormState;
+  pendingFiles: Record<string, File>;
+  onChange: (updater: (previous: StoryFormState) => StoryFormState) => void;
+  onSelectImage: (file: File) => void;
 }) {
-  const update = (patch: Partial<typeof storyDefaults>) => onChange({ ...form, ...patch });
+  const update = (patch: Partial<StoryFormState>) => {
+    onChange((previous) => ({ ...previous, ...patch }));
+  };
 
-  const updateStat = (index: number, patch: Partial<(typeof storyDefaults.stats)[0]>) => {
-    const stats = form.stats.map((row, i) => (i === index ? { ...row, ...patch } : row));
-    update({ stats });
+  const updateStat = (index: number, patch: Partial<StoryStat>) => {
+    onChange((previous) => ({
+      ...previous,
+      stats: previous.stats.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    }));
   };
 
   const addStat = () => {
-    update({ stats: [...form.stats, { value: "", label: "" }] });
+    onChange((previous) => ({
+      ...previous,
+      stats: [...previous.stats, { value: "", label: "" }],
+    }));
   };
 
   const removeStat = (index: number) => {
-    update({ stats: form.stats.filter((_, i) => i !== index) });
+    onChange((previous) => ({
+      ...previous,
+      stats: previous.stats.filter((_, rowIndex) => rowIndex !== index),
+    }));
   };
 
   const paragraphsText = form.paragraphs.join("\n\n");
 
   return (
     <div className="space-y-6">
-      <Field label="Overline">
-        <Input value={form.overline} onChange={(e) => update({ overline: e.target.value })} />
-      </Field>
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+        <Field label="Overline">
+          <Input
+            value={form.overline}
+            onChange={(event) => update({ overline: event.target.value })}
+          />
+        </Field>
+
+        <ImageUploadField
+          id="story-image"
+          label="Story Image"
+          hint="Shown alongside the craftsmanship story on the homepage."
+          value={form.imageUrl}
+          pending={Boolean(pendingFiles.imageUrl)}
+          onPick={onSelectImage}
+        />
+      </div>
+
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Heading (first line)">
           <Input
             value={form.headingLine1}
-            onChange={(e) => update({ headingLine1: e.target.value })}
+            onChange={(event) => update({ headingLine1: event.target.value })}
           />
         </Field>
-        <Field label="Heading (accent line)">
+        <Field label="Heading Accent">
           <Input
             value={form.headingAccent}
-            onChange={(e) => update({ headingAccent: e.target.value })}
+            onChange={(event) => update({ headingAccent: event.target.value })}
           />
         </Field>
       </div>
 
-      <Field label="Body paragraphs (blank line separates paragraphs)">
+      <Field label="Body Paragraphs">
         <Textarea
-          rows={8}
+          rows={9}
           value={paragraphsText}
-          onChange={(e) => {
-            const parts = e.target.value
+          onChange={(event) => {
+            const paragraphs = event.target.value
               .split(/\n\s*\n/)
-              .map((p) => p.trim())
+              .map((paragraph) => paragraph.trim())
               .filter(Boolean);
-            update({ paragraphs: parts.length ? parts : [e.target.value.trim()] });
-          }}
-        />
-      </Field>
 
-      <Field label="Image URL">
-        <Input
-          value={form.imageUrl}
-          onChange={(e) => update({ imageUrl: e.target.value })}
-          placeholder="/assets/... or https://"
+            update({
+              paragraphs: paragraphs.length
+                ? paragraphs
+                : [event.target.value.trim()].filter(Boolean),
+            });
+          }}
+          placeholder="Use a blank line to separate paragraphs."
         />
       </Field>
 
@@ -779,37 +1366,51 @@ function StoryFields({
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4">
           <Label>Stats</Label>
-          <Button type="button" size="sm" variant="outline" onClick={addStat}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="rounded-xl"
+            onClick={addStat}
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add stat
           </Button>
         </div>
+
         {form.stats.map((row, index) => (
           <div
-            key={`s-${index}`}
-            className="grid gap-3 rounded-lg border border-border/70 p-4 md:grid-cols-[1fr_2fr_auto]"
+            key={`story-stat-${index}`}
+            className="grid gap-4 rounded-2xl border border-slate-200 p-4 lg:grid-cols-[1fr_1.5fr_auto]"
           >
             <Field label="Value">
               <Input
                 value={row.value}
-                onChange={(e) => updateStat(index, { value: e.target.value })}
+                onChange={(event) =>
+                  updateStat(index, { value: event.target.value })
+                }
               />
             </Field>
+
             <Field label="Label">
               <Input
                 value={row.label}
-                onChange={(e) => updateStat(index, { label: e.target.value })}
+                onChange={(event) =>
+                  updateStat(index, { label: event.target.value })
+                }
               />
             </Field>
+
             <div className="flex items-end">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
+                className="h-10 w-10 shrink-0 text-muted-foreground hover:text-destructive"
                 onClick={() => removeStat(index)}
                 aria-label="Remove stat"
               >
-                <Trash2 className="h-4 w-4 text-destructive" />
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -819,7 +1420,107 @@ function StoryFields({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function ImageUploadField({
+  id,
+  label,
+  hint,
+  value,
+  pending,
+  onPick,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  pending: boolean;
+  onPick: (file: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const previewSrc = resolvePreviewImage(value);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={id}>{label}</Label>
+        {pending ? (
+          <Badge variant="secondary" className="gap-1">
+            <BadgeCheck className="h-3 w-3" />
+            Ready to save
+          </Badge>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        className="w-full rounded-2xl border-2 border-dashed border-slate-200 bg-[#F8FAFC] px-4 py-4 text-left transition-colors hover:border-primary hover:bg-primary/5"
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-primary shrink-0">
+            {previewSrc ? (
+              <img
+                src={previewSrc}
+                alt={label}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <ImageIcon size={20} />
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#1E293B]">
+              {previewSrc ? "Replace image" : "Upload image"}
+            </p>
+            <p className="mt-1 text-xs text-[#94A3B8]">{hint}</p>
+            {value ? (
+              <p className="mt-2 truncate text-xs text-muted-foreground">
+                {getImageName(value)}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="ml-auto hidden h-10 w-10 items-center justify-center rounded-xl bg-white text-slate-500 shadow-sm sm:flex">
+            <Upload size={16} />
+          </div>
+        </div>
+      </button>
+
+      <input
+        ref={inputRef}
+        id={id}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) {
+            onPick(file);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
+
+      {previewSrc ? (
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+          <img
+            src={previewSrc}
+            alt={label}
+            className="h-48 w-full object-cover"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="space-y-2">
       <Label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

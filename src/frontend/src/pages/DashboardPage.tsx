@@ -66,8 +66,11 @@ export function DashboardPage() {
   const dashboardQuery = useQuery({
     queryKey: dashboardQueryKey,
     queryFn: fetchDashboardSummary,
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 
   const summary = dashboardQuery.data;

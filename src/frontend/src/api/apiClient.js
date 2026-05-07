@@ -21,7 +21,7 @@ class APIClient {
   constructor(baseURL = BASE_URL) {
     this.baseURL = baseURL;
     this.timeout = 30000; // 30 seconds
-    this.token = null;
+    this.token = localStorage.getItem("adminToken");
   }
 
   /**
@@ -29,6 +29,12 @@ class APIClient {
    */
   setToken(token) {
     this.token = token;
+
+    if (token) {
+      localStorage.setItem("adminToken", token);
+    } else {
+      localStorage.removeItem("adminToken");
+    }
   }
 
   /**

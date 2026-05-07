@@ -3,8 +3,8 @@ function stripTrailingSlash(value) {
 }
 
 // API Base URL
-// export const BASE_URL = stripTrailingSlash("https://api.jpme.in");
-export const BASE_URL = stripTrailingSlash("http://localhost:7000");
+export const BASE_URL = stripTrailingSlash("https://api.jpme.in");
+// export const BASE_URL = stripTrailingSlash("http://localhost:7000");
 
 // API Endpoints
 export const ENDPOINTS = {
@@ -49,6 +49,11 @@ export const ENDPOINTS = {
   GET_INQUIRIES: "/admin/inquiries",
   DELETE_INQUIRY: "/admin/inquiries/:id",
   DASHBOARD_SUMMARY: "/admin/dashboard/summary",
+
+  GET_WEBSITE_CONTENT: "/admin/website-content/:modelKey",
+  GET_WEBSITE_CONTENTS: "/admin/website-content",
+  SAVE_WEBSITE_CONTENT: "/admin/website-content/:modelKey",
+  DELETE_WEBSITE_CONTENT: "/admin/website-content/:modelKey",
 };
 
 export default ENDPOINTS;
