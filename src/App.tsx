@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { GalleryPage } from "@/pages/GalleryPage";
+import { BlogsPage } from "@/pages/BlogsPage";
 import { InquiriesPage } from "@/pages/InquiriesPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { ProductsPage } from "@/pages/ProductsPage";
@@ -29,6 +30,8 @@ function PageContent({ page }: { page: PageId }) {
       return <ProductsPage />;
     case "gallery":
       return <GalleryPage />;
+    case "blogs":
+      return <BlogsPage />;
     case "reviews":
       return <ReviewsPage />;
     case "website-content":

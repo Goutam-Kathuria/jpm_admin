@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  BookOpenText,
   ChevronLeft,
   ChevronRight,
   Image,
@@ -19,6 +20,7 @@ export type PageId =
   | "categories"
   | "products"
   | "gallery"
+  | "blogs"
   | "reviews"
   | "website-content"
   | "settings";
@@ -29,6 +31,7 @@ const navItems: { id: PageId; label: string; icon: React.ElementType }[] = [
   { id: "categories", label: "Categories", icon: LayoutGrid },
   { id: "products", label: "Products", icon: ShoppingBag },
   { id: "gallery", label: "Gallery", icon: Image },
+  { id: "blogs", label: "Blogs", icon: BookOpenText },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "website-content", label: "Website Content", icon: LayoutTemplate },
   { id: "settings", label: "Settings", icon: Settings },

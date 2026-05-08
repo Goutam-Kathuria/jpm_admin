@@ -1,11 +1,15 @@
 manifest_version = "0.1.0"
 
 [project]
-id = "my-app"
-name = "my-app"
+name = "frontend"
+type = "assets"
 
-[workspace]
-include = ["src/**"]
+[build]
+commands = ["pnpm build"]
+out = "dist"
 
-[canisters.frontend]
-depends_on = ["backend"]
+[check]
+commands = ["pnpm typecheck", "pnpm check"]
+
+[check.fix]
+commands = ["pnpm typecheck", "pnpm fix"]

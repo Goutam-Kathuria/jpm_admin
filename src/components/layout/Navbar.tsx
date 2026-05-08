@@ -10,6 +10,7 @@ const pageTitles: Record<PageId, string> = {
   categories: "Categories",
   products: "Products",
   gallery: "Gallery",
+  blogs: "Blogs",
   reviews: "Reviews",
   "website-content": "Website Content",
   settings: "Settings",
