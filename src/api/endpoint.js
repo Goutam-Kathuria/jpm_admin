@@ -3,8 +3,8 @@ function stripTrailingSlash(value) {
 }
 
 // API Base URL
-export const BASE_URL = stripTrailingSlash("https://api.jpme.in");
-// export const BASE_URL = stripTrailingSlash("http://localhost:7000");
+// export const BASE_URL = stripTrailingSlash("https://api.jpme.in");
+export const BASE_URL = stripTrailingSlash("http://localhost:7000");
 
 // API Endpoints
 export const ENDPOINTS = {

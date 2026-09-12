@@ -21,6 +21,7 @@ export type PageId =
   | "products"
   | "gallery"
   | "blogs"
+  | "cms-pages"
   | "reviews"
   | "website-content"
   | "settings";
@@ -32,6 +33,7 @@ const navItems: { id: PageId; label: string; icon: React.ElementType }[] = [
   { id: "products", label: "Products", icon: ShoppingBag },
   { id: "gallery", label: "Gallery", icon: Image },
   { id: "blogs", label: "Blogs", icon: BookOpenText },
+  { id: "cms-pages", label: "CMS Pages", icon: LayoutTemplate },
   { id: "reviews", label: "Reviews", icon: Star },
   { id: "website-content", label: "Website Content", icon: LayoutTemplate },
   { id: "settings", label: "Settings", icon: Settings },

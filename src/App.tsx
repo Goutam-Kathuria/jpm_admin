@@ -3,6 +3,7 @@ import type { PageId } from "@/components/layout/Sidebar";
 import { ThemeCustomizer } from "@/components/ui-custom/ThemeCustomizer";
 import { Toaster } from "@/components/ui/sonner";
 import { CategoriesPage } from "@/pages/CategoriesPage";
+import { CmsPagesPage } from "@/pages/CmsPagesPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { GalleryPage } from "@/pages/GalleryPage";
 import { BlogsPage } from "@/pages/BlogsPage";
@@ -32,6 +33,8 @@ function PageContent({ page }: { page: PageId }) {
       return <GalleryPage />;
     case "blogs":
       return <BlogsPage />;
+    case "cms-pages":
+      return <CmsPagesPage />;
     case "reviews":
       return <ReviewsPage />;
     case "website-content":
