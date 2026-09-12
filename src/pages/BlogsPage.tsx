@@ -15,8 +15,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  addBlog,
+  deleteBlog,
+  editBlog,
+  getBlogs,
+  type Blog,
+  type SaveBlogInput,
+} from "@/lib/blogsApi";
 import { getWebsiteContent, saveWebsiteContent } from "@/lib/websiteContentApi";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactQuill from "react-quill-new";
@@ -47,6 +55,7 @@ type BlogFeedFormState = {
 };
 
 const blogsQueryKey = ["admin", "website-content", "blogs"];
+const blogPostsQueryKey = ["admin", "blogs"];
 
 const defaultBlogPost: BlogPostForm = {
   id: "",
@@ -64,15 +73,13 @@ const defaultBlogPost: BlogPostForm = {
   visible: true,
 };
 
-const defaultBlogsForm: BlogsFormState = {
+const defaultBlogsForm: BlogFeedFormState = {
   visible: true,
   overline: "Furniture Journal",
   heading: "Ideas that help your home feel beautifully lived in",
   description:
     "Publish SEO-focused blog posts that target search intent around sofas, furniture buying, upholstery, and interior styling.",
-  posts: [],
 };
-type BlogsFormState = BlogFeedFormState & { posts: BlogPostForm[] };
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -82,49 +89,26 @@ function createEmptyBlogPost() {
   return { ...defaultBlogPost, id: crypto.randomUUID() };
 }
 
-function normalizeBlogPost(raw: unknown): BlogPostForm {
-  const post = raw && typeof raw === "object" ? raw : {};
-  const tagsValue = Array.isArray((post as { tags?: unknown }).tags)
-    ? (post as { tags: unknown[] }).tags
-        .map((tag) => normalizeText(tag))
-        .filter(Boolean)
-        .join(", ")
-    : normalizeText((post as { tags?: unknown }).tags);
-
+function mapBlogToForm(post: Blog): BlogPostForm {
   return {
-    id:
-      normalizeText((post as { id?: unknown }).id) ||
-      normalizeText((post as { _id?: unknown })._id) ||
-      crypto.randomUUID(),
-    title: normalizeText((post as { title?: unknown }).title),
-    slug: normalizeText((post as { slug?: unknown }).slug),
-    excerpt: normalizeText((post as { excerpt?: unknown }).excerpt),
-    content:
-      normalizeText((post as { content?: unknown }).content) ||
-      normalizeText((post as { body?: unknown }).body),
-    coverImageUrl:
-      normalizeText((post as { coverImageUrl?: unknown }).coverImageUrl) ||
-      normalizeText((post as { image?: unknown }).image),
-    authorName:
-      normalizeText((post as { authorName?: unknown }).authorName) ||
-      "JPM Enterprises",
-    publishedAt: normalizeText((post as { publishedAt?: unknown }).publishedAt),
-    tags: tagsValue,
-    metaTitle: normalizeText((post as { metaTitle?: unknown }).metaTitle),
-    metaDescription: normalizeText(
-      (post as { metaDescription?: unknown }).metaDescription,
-    ),
-    featured: (post as { featured?: unknown }).featured === true,
-    visible:
-      (post as { visible?: unknown }).visible === false ? false : true,
+    id: post._id,
+    title: post.title,
+    slug: post.slug,
+    excerpt: post.excerpt,
+    content: post.content,
+    coverImageUrl: post.coverImageUrl,
+    authorName: post.authorName || "JPM Enterprises",
+    publishedAt: post.publishedAt ? post.publishedAt.slice(0, 10) : "",
+    tags: post.tags.join(", "),
+    metaTitle: post.metaTitle,
+    metaDescription: post.metaDescription,
+    featured: post.featured,
+    visible: post.visible,
   };
 }
 
-function normalizeBlogsForm(raw: unknown, visible = true): BlogsFormState {
+function normalizeBlogsForm(raw: unknown, visible = true): BlogFeedFormState {
   const data = raw && typeof raw === "object" ? raw : {};
-  const posts = Array.isArray((data as { posts?: unknown }).posts)
-    ? (data as { posts: unknown[] }).posts.map(normalizeBlogPost)
-    : [];
 
   return {
     visible,
@@ -137,32 +121,14 @@ function normalizeBlogsForm(raw: unknown, visible = true): BlogsFormState {
     description:
       normalizeText((data as { description?: unknown }).description) ||
       defaultBlogsForm.description,
-    posts,
   };
 }
 
-function serializeBlogsForm(form: BlogsFormState) {
+function serializeBlogsForm(form: BlogFeedFormState) {
   return {
     overline: form.overline.trim(),
     heading: form.heading.trim(),
     description: form.description.trim(),
-    posts: form.posts.map((post) => ({
-      title: post.title.trim(),
-      slug: post.slug.trim(),
-      excerpt: post.excerpt.trim(),
-      content: post.content.trim(),
-      coverImageUrl: post.coverImageUrl.trim(),
-      authorName: post.authorName.trim(),
-      publishedAt: post.publishedAt.trim(),
-      tags: post.tags
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter(Boolean),
-      metaTitle: post.metaTitle.trim(),
-      metaDescription: post.metaDescription.trim(),
-      featured: post.featured,
-      visible: post.visible,
-    })),
   };
 }
 
@@ -182,7 +148,7 @@ export function BlogsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [postForm, setPostForm] = useState<BlogPostForm>(createEmptyBlogPost());
-  const [imageFilesByPostId, setImageFilesByPostId] = useState<Record<string, File>>({});
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -190,6 +156,11 @@ export function BlogsPage() {
   const blogsQuery = useQuery({
     queryKey: blogsQueryKey,
     queryFn: () => getWebsiteContent("blogs"),
+  });
+
+  const blogPostsQuery = useQuery({
+    queryKey: blogPostsQueryKey,
+    queryFn: getBlogs,
   });
 
   useEffect(() => {
@@ -204,8 +175,13 @@ export function BlogsPage() {
       heading: normalized.heading,
       description: normalized.description,
     });
-    setPosts(normalized.posts);
   }, [blogsQuery.data]);
+
+  useEffect(() => {
+    if (blogPostsQuery.data) {
+      setPosts(blogPostsQuery.data.map(mapBlogToForm));
+    }
+  }, [blogPostsQuery.data]);
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -234,6 +210,7 @@ export function BlogsPage() {
   function resetPostForm() {
     setEditingId(null);
     setPostForm(createEmptyBlogPost());
+    setImageFile(null);
     setImagePreview("");
     clearFileInput();
   }
@@ -247,6 +224,7 @@ export function BlogsPage() {
     setEditingId(post.id);
     setPostForm({ ...post });
     setImagePreview(post.coverImageUrl);
+    setImageFile(null);
     clearFileInput();
     setModalOpen(true);
   }
@@ -262,11 +240,54 @@ export function BlogsPage() {
     if (!file) return;
     const preview = URL.createObjectURL(file);
     setImagePreview(preview);
-    setPostForm((current) => {
-      setImageFilesByPostId((images) => ({ ...images, [current.id]: file }));
-      return { ...current, coverImageUrl: preview };
-    });
+    setImageFile(file);
+    setPostForm((current) => ({ ...current, coverImageUrl: preview }));
   }
+
+  const savePostMutation = useMutation({
+    mutationFn: async (form: BlogPostForm) => {
+      const input: SaveBlogInput = {
+        title: form.title.trim(),
+        slug: form.slug.trim(),
+        excerpt: form.excerpt.trim(),
+        content: form.content.trim(),
+        coverImageUrl: imageFile ? "" : form.coverImageUrl.trim(),
+        coverImage: imageFile,
+        authorName: form.authorName.trim(),
+        publishedAt: form.publishedAt.trim(),
+        tags: form.tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        metaTitle: form.metaTitle.trim(),
+        metaDescription: form.metaDescription.trim(),
+        featured: form.featured,
+        visible: form.visible,
+      };
+
+      return editingId ? editBlog(editingId, input) : addBlog(input);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: blogPostsQueryKey });
+      setModalOpen(false);
+      resetPostForm();
+      toast.success(editingId ? "Blog updated" : "Blog added");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: deleteBlog,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: blogPostsQueryKey });
+      toast.success("Blog deleted");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
 
   function handleSavePost() {
     const title = postForm.title.trim();
@@ -275,50 +296,23 @@ export function BlogsPage() {
       return;
     }
 
-    setPosts((current) => {
-      if (editingId) {
-        return current.map((item) =>
-          item.id === editingId ? { ...postForm, title } : item,
-        );
-      }
-      return [...current, { ...postForm, title }];
-    });
-    setModalOpen(false);
-    resetPostForm();
+    savePostMutation.mutate({ ...postForm, title });
   }
 
   function handleDelete(id: string) {
-    setPosts((current) => current.filter((post) => post.id !== id));
-    setImageFilesByPostId((current) => {
-      const next = { ...current };
-      delete next[id];
-      return next;
-    });
+    deletePostMutation.mutate(id);
   }
 
   function handleSaveAll() {
-    const files: Record<string, File> = {};
-    const payloadPosts = posts.map((post, index) => {
-      const nextPost = { ...post };
-      const imageFile = imageFilesByPostId[post.id];
-      if (imageFile) {
-        files[`posts.${index}.coverImageUrl`] = imageFile;
-        nextPost.coverImageUrl = "";
-      }
-      return nextPost;
-    });
-
-    const payload = serializeBlogsForm({ ...feedForm, posts: payloadPosts });
+    const payload = serializeBlogsForm(feedForm);
     setIsSaving(true);
     void saveWebsiteContent("blogs", {
       visible: feedForm.visible,
       data: payload,
-      files,
     })
       .then(async () => {
         await queryClient.invalidateQueries({ queryKey: blogsQueryKey });
-        setImageFilesByPostId({});
-        toast.success("Blogs updated");
+        toast.success("Blog section updated");
       })
       .catch((error) => {
         toast.error(getErrorMessage(error));
@@ -400,7 +394,7 @@ export function BlogsPage() {
       </div>
 
       <div className="rounded-xl border border-border bg-card">
-        {blogsQuery.isLoading ? (
+        {blogsQuery.isLoading || blogPostsQuery.isLoading ? (
           <div className="p-4">
             <TableSkeleton rows={5} columns={6} />
           </div>
@@ -473,7 +467,13 @@ export function BlogsPage() {
         size="lg"
         footer={
           <div className="flex gap-2">
-            <Button onClick={handleSavePost}>{editingPost ? "Save Changes" : "Add Blog"}</Button>
+            <Button onClick={handleSavePost} disabled={savePostMutation.isPending}>
+              {savePostMutation.isPending
+                ? "Saving..."
+                : editingPost
+                  ? "Save Changes"
+                  : "Add Blog"}
+            </Button>
             <Button variant="ghost" onClick={handleCloseModal}>
               Cancel
             </Button>
@@ -488,7 +488,7 @@ export function BlogsPage() {
             </div>
             <div>
               <Label>Slug</Label>
-              <Input value={postForm.slug} onChange={(e) => setPostForm((c) => ({ ...c, slug: e.target.value }))} />
+              <Input value={postForm.slug} onChange={(e) => setPostForm((c) => ({ ...c, slug: e.target.value }))} placeholder="Auto-generated when empty" />
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -498,7 +498,7 @@ export function BlogsPage() {
             </div>
             <div>
               <Label>Published Date</Label>
-              <Input value={postForm.publishedAt} onChange={(e) => setPostForm((c) => ({ ...c, publishedAt: e.target.value }))} />
+              <Input type="date" value={postForm.publishedAt} onChange={(e) => setPostForm((c) => ({ ...c, publishedAt: e.target.value }))} />
             </div>
           </div>
           <div>

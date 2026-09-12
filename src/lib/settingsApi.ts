@@ -12,6 +12,9 @@ export interface Setting {
   instagramUrl: string;
   twitterUrl: string;
   linkedinUrl: string;
+  googlePlacesApiKey: string;
+  googlePlaceId: string;
+  googleReviewsEnabled: boolean;
   hasPassword: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -28,6 +31,9 @@ export interface SaveSettingInput {
   instagramUrl?: string;
   twitterUrl?: string;
   linkedinUrl?: string;
+  googlePlacesApiKey?: string;
+  googlePlaceId?: string;
+  googleReviewsEnabled?: boolean;
 }
 
 interface SettingsResponse {
@@ -46,6 +52,9 @@ function normalizeSetting(setting: Setting): Setting {
     instagramUrl: setting.instagramUrl ?? "",
     twitterUrl: setting.twitterUrl ?? "",
     linkedinUrl: setting.linkedinUrl ?? "",
+    googlePlacesApiKey: setting.googlePlacesApiKey ?? "",
+    googlePlaceId: setting.googlePlaceId ?? "",
+    googleReviewsEnabled: setting.googleReviewsEnabled === true,
     hasPassword: Boolean(setting.hasPassword),
   };
 }

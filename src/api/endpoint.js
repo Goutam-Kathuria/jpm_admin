@@ -35,6 +35,12 @@ export const ENDPOINTS = {
   EDIT_REVIEW: "/admin/reviews/:id",
   DELETE_REVIEW: "/admin/reviews/:id",
 
+  // Blogs
+  GET_BLOGS: "/admin/blogs",
+  ADD_BLOG: "/admin/blogs",
+  EDIT_BLOG: "/admin/blogs/:id",
+  DELETE_BLOG: "/admin/blogs/:id",
+
   // Settings
   GET_SETTINGS: "/admin/settings",
   ADD_SETTING: "/admin/settings",

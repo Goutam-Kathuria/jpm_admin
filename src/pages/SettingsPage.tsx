@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   addSetting,
@@ -25,6 +26,7 @@ import {
   MapPin,
   Phone,
   Save,
+  Star,
   Twitter,
   User,
 } from "lucide-react";
@@ -42,6 +44,9 @@ interface AdminSettings {
   instagramUrl: string;
   twitterUrl: string;
   linkedinUrl: string;
+  googlePlacesApiKey: string;
+  googlePlaceId: string;
+  googleReviewsEnabled: boolean;
 }
 
 interface FormErrors {
@@ -52,6 +57,8 @@ interface FormErrors {
   instagramUrl?: string;
   twitterUrl?: string;
   linkedinUrl?: string;
+  googlePlacesApiKey?: string;
+  googlePlaceId?: string;
 }
 
 const settingsQueryKey = ["admin", "settings"];
@@ -68,6 +75,9 @@ function getDefaultSettings(): AdminSettings {
     instagramUrl: "",
     twitterUrl: "",
     linkedinUrl: "",
+    googlePlacesApiKey: "",
+    googlePlaceId: "",
+    googleReviewsEnabled: false,
   };
 }
 
@@ -87,6 +97,9 @@ function mapSettingToForm(setting: Setting | null): AdminSettings {
     instagramUrl: setting.instagramUrl ?? "",
     twitterUrl: setting.twitterUrl ?? "",
     linkedinUrl: setting.linkedinUrl ?? "",
+    googlePlacesApiKey: setting.googlePlacesApiKey ?? "",
+    googlePlaceId: setting.googlePlaceId ?? "",
+    googleReviewsEnabled: setting.googleReviewsEnabled === true,
   };
 }
 
@@ -220,6 +233,17 @@ export function SettingsPage() {
       newErrors.linkedinUrl = "Please enter a valid LinkedIn URL.";
     }
 
+    if (
+      settings.googleReviewsEnabled &&
+      !settings.googlePlacesApiKey.trim()
+    ) {
+      newErrors.googlePlacesApiKey = "Google Places API key is required.";
+    }
+
+    if (settings.googleReviewsEnabled && !settings.googlePlaceId.trim()) {
+      newErrors.googlePlaceId = "Google Place ID is required.";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -237,6 +261,9 @@ export function SettingsPage() {
       instagramUrl: settings.instagramUrl.trim(),
       twitterUrl: settings.twitterUrl.trim(),
       linkedinUrl: settings.linkedinUrl.trim(),
+      googlePlacesApiKey: settings.googlePlacesApiKey.trim(),
+      googlePlaceId: settings.googlePlaceId.trim(),
+      googleReviewsEnabled: settings.googleReviewsEnabled,
     };
 
     const password = settings.adminPassword.trim();
@@ -558,6 +585,73 @@ export function SettingsPage() {
               {errors.linkedinUrl && (
                 <p className="mt-1 text-xs text-destructive" role="alert">
                   {errors.linkedinUrl}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="bg-card border border-border rounded-xl p-6 shadow-subtle space-y-5">
+          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
+            <Star className="w-4 h-4 text-primary" />
+            Google Reviews
+          </h3>
+          <Separator />
+
+          <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Use Google reviews on website
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Website testimonials will load from Google Places when enabled.
+              </p>
+            </div>
+            <Switch
+              checked={settings.googleReviewsEnabled}
+              onCheckedChange={(checked) =>
+                setField("googleReviewsEnabled", checked)
+              }
+              data-ocid="settings-google-reviews-enabled"
+            />
+          </div>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <Label htmlFor="google-places-api-key">
+                Google Places API Key
+              </Label>
+              <Input
+                id="google-places-api-key"
+                type="password"
+                value={settings.googlePlacesApiKey}
+                onChange={(e) =>
+                  setField("googlePlacesApiKey", e.target.value)
+                }
+                className={`mt-1 ${errors.googlePlacesApiKey ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                placeholder="AIza..."
+                data-ocid="settings-google-api-key-input"
+              />
+              {errors.googlePlacesApiKey && (
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  {errors.googlePlacesApiKey}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="google-place-id">Google Place ID</Label>
+              <Input
+                id="google-place-id"
+                value={settings.googlePlaceId}
+                onChange={(e) => setField("googlePlaceId", e.target.value)}
+                className={`mt-1 ${errors.googlePlaceId ? "border-destructive focus-visible:ring-destructive/40" : ""}`}
+                placeholder="ChIJ..."
+                data-ocid="settings-google-place-id-input"
+              />
+              {errors.googlePlaceId && (
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  {errors.googlePlaceId}
                 </p>
               )}
             </div>

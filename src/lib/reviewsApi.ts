@@ -6,6 +6,14 @@ export interface Review {
   name: string;
   description: string;
   profilePic?: string;
+  googleReviewId?: string;
+  platform?: string;
+  rating?: number;
+  reviewDate?: string;
+  authorUrl?: string;
+  visible?: boolean;
+  featured?: boolean;
+  order?: number;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -13,6 +21,23 @@ export interface Review {
 interface ReviewsResponse {
   review?: Review;
   reviews?: Review[];
+}
+
+interface GoogleReviewsSyncResponse {
+  message: string;
+  synced: number;
+  skipped: number;
+  total: number;
+  placeRating?: number;
+  totalPlaceReviews?: number;
+}
+
+interface GoogleReviewsStatusResponse {
+  configured: boolean;
+  enabled: boolean;
+  apiKeySet: boolean;
+  placeIdSet: boolean;
+  googleReviewsCount: number;
 }
 
 function normalizeReview(review: Review): Review {
@@ -52,4 +77,12 @@ export async function editReview(id: string, formData: FormData) {
 
 export async function deleteReview(id: string) {
   return apiClient.delete(getReviewPath(ENDPOINTS.DELETE_REVIEW, id));
+}
+
+export async function syncGoogleReviews(): Promise<GoogleReviewsSyncResponse> {
+  return apiClient.post("/admin/google-reviews/sync", {}) as Promise<GoogleReviewsSyncResponse>;
+}
+
+export async function getGoogleReviewsStatus(): Promise<GoogleReviewsStatusResponse> {
+  return apiClient.get("/admin/google-reviews/status") as Promise<GoogleReviewsStatusResponse>;
 }

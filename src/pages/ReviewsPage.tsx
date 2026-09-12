@@ -11,10 +11,12 @@ import {
   addReview,
   deleteReview,
   editReview,
+  getGoogleReviewsStatus,
   getReviews,
+  syncGoogleReviews,
 } from "@/lib/reviewsApi";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MessageSquareQuote, Pencil, Plus, Quote, Trash2 } from "lucide-react";
+import { MessageSquareQuote, Pencil, Plus, Quote, RefreshCw, Star, Trash2 } from "lucide-react";
 import { type ChangeEvent, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -29,6 +31,7 @@ const emptyReview: ReviewFormValues = {
 };
 
 const reviewsQueryKey = ["admin", "reviews"];
+const googleReviewsStatusQueryKey = ["admin", "google-reviews", "status"];
 const reviewSkeletonItems = Array.from(
   { length: 6 },
   (_, index) => `review-skeleton-${index}`,
@@ -76,6 +79,30 @@ export function ReviewsPage() {
     queryFn: getReviews,
   });
 
+  const googleStatusQuery = useQuery({
+    queryKey: googleReviewsStatusQueryKey,
+    queryFn: getGoogleReviewsStatus,
+  });
+
+  const syncGoogleReviewsMutation = useMutation({
+    mutationFn: syncGoogleReviews,
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: reviewsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: googleReviewsStatusQueryKey });
+      
+      if (data.synced > 0) {
+        toast.success(`Synced ${data.synced} new review${data.synced > 1 ? 's' : ''} from Google!`);
+      } else if (data.total > 0) {
+        toast.info(`All ${data.total} Google reviews are already synced.`);
+      } else {
+        toast.info("No reviews found on Google.");
+      }
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+
   const saveReviewMutation = useMutation({
     mutationFn: async ({
       id,
@@ -114,8 +141,11 @@ export function ReviewsPage() {
   });
 
   const reviews = reviewsQuery.data ?? [];
+  const googleStatus = googleStatusQuery.data;
   const isSaving = saveReviewMutation.isPending;
   const isDeleting = deleteReviewMutation.isPending;
+  const isSyncing = syncGoogleReviewsMutation.isPending;
+  const canSyncGoogle = googleStatus?.configured && googleStatus?.enabled;
 
   useEffect(() => {
     return () => {
@@ -200,16 +230,47 @@ export function ReviewsPage() {
     deleteReviewMutation.mutate(deleteId);
   }
 
+  function handleSyncGoogle() {
+    if (!canSyncGoogle) {
+      toast.error("Please configure Google Reviews in Settings first.");
+      return;
+    }
+    
+    syncGoogleReviewsMutation.mutate();
+  }
+
   return (
     <div>
       <PageHeader
         title="Reviews"
         subtitle={`${reviews.length} client reviews`}
         action={
-          <Button onClick={openAdd} data-ocid="add-review">
-            <Plus className="w-4 h-4 mr-2" />
-            Add Review
-          </Button>
+          <div className="flex gap-2">
+            {canSyncGoogle && (
+              <Button 
+                variant="outline" 
+                onClick={handleSyncGoogle}
+                disabled={isSyncing}
+                data-ocid="sync-google-reviews"
+              >
+                {isSyncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <Star className="w-4 h-4 mr-2" />
+                    Sync Google Reviews
+                  </>
+                )}
+              </Button>
+            )}
+            <Button onClick={openAdd} data-ocid="add-review">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Review
+            </Button>
+          </div>
         }
       />
 
@@ -285,9 +346,31 @@ export function ReviewsPage() {
                     <p className="font-display font-semibold text-foreground text-sm">
                       {review.name}
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      Client review
-                    </p>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {review.platform === "google" ? (
+                        <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          Google
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Client review
+                        </span>
+                      )}
+                      {review.rating && (
+                        <div className="flex items-center gap-0.5 ml-1">
+                          {Array.from({ length: 5 }, (_, i) => (
+                            <Star
+                              key={i}
+                              className={`w-2.5 h-2.5 ${
+                                i < review.rating!
+                                  ? "fill-yellow-400 text-yellow-400"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
