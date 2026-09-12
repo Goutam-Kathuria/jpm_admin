@@ -1,71 +1,51 @@
-# Design Brief
+Samarpan Hospital Is A Modern, Multi-Speciality Healthcare Centre Dedicated To Delivering High-Quality Medical Care Through Exceptional Clinical Expertise, Advanced Technology, And State-Of-The-Art Infrastructure. We're Built On Trust, Excellence, And Compassionate Care, And We're Dedicated To Delivering Safe, Precise, Patient-Centred Healthcare. At Samarpan Hospital, We Believe Healthcare Is Not Just About Treating Illnesses—It Is About Restoring Balance, Rebuilding Confidence, Ensuring Comfort, And Improving Overall Well-Being. Our Philosophy Combines Medical Precision With Aesthetic Excellence To Create A Holistic Healing Experience For Every Patient. With A Team Of Highly Skilled Specialists, Experienced Surgeons, Trained Nursing Staff, And Compassionate Healthcare Professionals, We Maintain The Highest Standards Of Care Through Well-Defined Systems, Evidence-Based Practices, And Advanced Clinical Protocols. Our Specialties We Provide Comprehensive Care Across Multiple Specialities, Including: Burn, Plastic and Reconstructive Advanced Laparoscopic Surgery Premium Obstetrics & Maternity Care Bariatric Surgery General Surgery Orthopedics Urology
 
-## Direction
 
-Premium Luxury Admin — warm, refined, spacious interface inspired by high-end furniture showrooms.
+Established in May 2025, Samarpan Hospital is a modern multi-speciality healthcare centre in Hisar, Haryana, committed to providing advanced, safe, and compassionate medical care. From the very beginning, our vision has been to create a healthcare environment where **clinical expertise, advanced technology, modern infrastructure, and genuine patient care** come together.
 
-## Tone
+At **Samarpan Hospital**, we believe healthcare goes beyond treating a disease or performing a procedure. It is about understanding every patient's individual needs, restoring health and confidence, reducing discomfort, and supporting a better quality of life.
 
-Sophisticated minimalism with warm undertones — elegant serif headings paired with modern sans-serif body, soft gold accents used sparingly, all surfaces elevated through careful depth.
+Our hospital brings together experienced specialists, skilled surgeons, trained nursing professionals, and dedicated healthcare staff who work collaboratively to deliver personalized care at every stage of a patient's journey. We follow evidence-based medical practices, established clinical protocols, and stringent standards of safety to ensure that every patient receives care they can trust.
 
-## Differentiation
+## Our Specialities
 
-Warm cream and gold palette creates a furniture-showroom aesthetic rare in admin interfaces; combined with deliberate spacing and soft shadows, this produces an immediately recognizable, premium interface.
+Samarpan Hospital provides comprehensive medical and surgical care across a range of specialities, including:
 
-## Color Palette
+Burn Care
+Plastic & Reconstructive Surgery
+Advanced Laparoscopic Surgery
+Obstetrics & Gynaecology / Maternity Care
+Bariatric Surgery
+General Surgery
+Orthopaedics
+Urology
 
-| Token      | OKLCH          | Role                           |
-| ---------- | -------------- | ------------------------------ |
-| background | 0.96 0.015 75  | Warm cream base; spacious feel |
-| foreground | 0.2 0.03 50    | Charcoal text for readability  |
-| card       | 0.98 0.01 75   | Subtle elevation above base    |
-| primary    | 0.55 0.12 30   | Warm gold; calls-to-action     |
-| accent     | 0.5 0.1 160    | Muted sage; secondary emphasis |
-| muted      | 0.92 0.02 75   | Subtle separators, disabled UI |
+Our multidisciplinary approach allows specialists to work together when required, ensuring that patients receive coordinated and comprehensive treatment.
 
-## Typography
+Advanced Healthcare, Designed Around You
 
-- Display: Lora — serif headings, page titles, section labels (font-weight: bold)
-- Body: DM Sans — body text, form labels, UI copy (font-weight: normal)
-- Scale: hero `text-4xl font-bold tracking-tight`, h2 `text-2xl font-bold tracking-tight`, label `text-xs font-semibold uppercase`, body `text-base`
+We combine modern medical technology with a patient-first approach to provide a comfortable and efficient healthcare experience.
 
-## Elevation & Depth
+State-of-the-Art Infrastructure
 
-Soft shadow hierarchy: card borders via 1px border-border, subtle shadows on hover, no drop shadows at rest; layers created through background color shifts (background → card → popover).
+Modern operation theatres, diagnostic facilities, and clinical infrastructure designed to support safe and efficient treatment.
 
-## Structural Zones
+Experienced Medical Team
 
-| Zone    | Background  | Border        | Notes                                       |
-| ------- | ----------- | ------------- | ------------------------------------------- |
-| Header  | bg-card     | border-b      | Top navbar; search + profile; soft elevated |
-| Sidebar | bg-sidebar  | border-r      | Left nav; smooth hover states on items      |
-| Content | bg-background | —            | Main grid area; card sections alternate     |
-| Footer  | bg-card     | border-t      | Sticky footer; settings, metadata           |
+A dedicated team of experienced specialists, surgeons, nurses, and healthcare professionals focused on delivering quality care.
 
-## Spacing & Rhythm
+Advanced Surgical Facilities
 
-Spacious grid (gap-6 between sections, p-8 inside cards); micro-spacing uses 4px/8px increments; section breaks use full background color shifts rather than lines.
+Modern facilities supporting advanced laparoscopic, reconstructive, cosmetic, and other surgical procedures.
 
-## Component Patterns
+Personalized Patient Care
 
-- Buttons: rounded-lg, bg-primary text-primary-foreground, hover:opacity-90, transition-smooth
-- Cards: bg-card rounded-lg border border-border shadow-subtle, p-6, transition-smooth
-- Badges: rounded-full, bg-muted text-muted-foreground, text-xs font-semibold
-- Tables: striped rows via bg-card/bg-background alternation, subtle borders
+Every patient is different. Our care is designed around individual medical requirements, with clear communication and attention throughout the treatment journey.
 
-## Motion
+Our Commitment
 
-- Entrance: buttons/cards fade in over 200ms ease-out on mount
-- Hover: buttons brighten via opacity-90, cards lift via shadow-elevated, text darkens slightly
-- Decorative: none; animation reserved for interaction feedback
+Since May 2025, Samarpan Hospital has been committed to building a healthcare institution based on **trust, transparency, clinical excellence, safety, and compassion**.
 
-## Constraints
+We continuously strive to improve our medical services, adopt appropriate advancements in healthcare technology, and maintain high standards of clinical practice. Our goal is not simply to provide treatment, but to create a healthcare experience where patients and their families feel **informed, respected, comfortable, and cared for**.
 
-- No raw hex or named colors; OKLCH variables only
-- Rounded corners always via --radius (8px); avoid sharp edges
-- Shadows: use shadow-subtle (rest), shadow-elevated (hover), never use default Tailwind shadows
-- Chroma kept low across palette (0.01–0.17) to maintain luxury softness
-
-## Signature Detail
-
-Warm gold accents in a cream interface create unexpected sophistication — borrowed from furniture design language but rarely seen in digital admin UIs, making the interface instantly memorable and differentiated.
+Samarpan Hospital — where experience meets expertise, and expertise is delivered with compassion.

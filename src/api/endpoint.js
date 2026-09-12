@@ -29,6 +29,14 @@ export const ENDPOINTS = {
   EDIT_GALLERY: "/admin/gallery/:id",
   DELETE_GALLERY: "/admin/gallery/:id",
 
+  // Banners
+  GET_BANNERS: "/admin/banners",
+  GET_BANNER: "/admin/banners/:id",
+  ADD_BANNER: "/admin/banners",
+  EDIT_BANNER: "/admin/banners/:id",
+  DELETE_BANNER: "/admin/banners/:id",
+  TOGGLE_BANNER_STATUS: "/admin/banners/:id/toggle-status",
+
   // Reviews
   GET_REVIEWS: "/admin/reviews",
   ADD_REVIEW: "/admin/reviews",

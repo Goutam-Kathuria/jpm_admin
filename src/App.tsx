@@ -2,6 +2,7 @@ import { Layout } from "@/components/layout/Layout";
 import type { PageId } from "@/components/layout/Sidebar";
 import { ThemeCustomizer } from "@/components/ui-custom/ThemeCustomizer";
 import { Toaster } from "@/components/ui/sonner";
+import { BannersPage } from "@/pages/BannersPage";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 import { CmsPagesPage } from "@/pages/CmsPagesPage";
 import { DashboardPage } from "@/pages/DashboardPage";
@@ -29,6 +30,8 @@ function PageContent({ page }: { page: PageId }) {
       return <CategoriesPage />;
     case "products":
       return <ProductsPage />;
+    case "banners":
+      return <BannersPage />;
     case "gallery":
       return <GalleryPage />;
     case "blogs":

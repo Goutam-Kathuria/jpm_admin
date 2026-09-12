@@ -4,6 +4,7 @@ import {
   BookOpenText,
   ChevronLeft,
   ChevronRight,
+  Frame,
   Image,
   LayoutDashboard,
   LayoutGrid,
@@ -19,6 +20,7 @@ export type PageId =
   | "inquiries"
   | "categories"
   | "products"
+  | "banners"
   | "gallery"
   | "blogs"
   | "cms-pages"
@@ -31,6 +33,7 @@ const navItems: { id: PageId; label: string; icon: React.ElementType }[] = [
   { id: "inquiries", label: "Inquiries", icon: MessageSquare },
   { id: "categories", label: "Categories", icon: LayoutGrid },
   { id: "products", label: "Products", icon: ShoppingBag },
+  { id: "banners", label: "Banners", icon: Frame },
   { id: "gallery", label: "Gallery", icon: Image },
   { id: "blogs", label: "Blogs", icon: BookOpenText },
   { id: "cms-pages", label: "CMS Pages", icon: LayoutTemplate },
